@@ -1,0 +1,68 @@
+modLoader="javafml"
+loaderVersion="[47,)"
+license="MIT"
+
+[[mods]]
+modId="bm_falkye"
+version="1.0"
+displayName="BM Falkye"
+logoFile="mod_icon.png"
+description='''
+Карточная игра Falkye в стиле стратегических карточных игр!
+
+🎴Играйте в карты с другими игроками
+⚔️Собирайте колоды из существ, заклинаний и специальных карт
+🏆Побеждайте в дуэлях и становитесь мастером карт
+✨Улучшенный визуал с градиентами, тенями и анимациями'''
+authors="BeforeMine Team"
+
+[[dependencies.bm_falkye]]
+modId="forge"
+mandatory=true
+versionRange="[47.2.0,)"
+
+[[dependencies.bm_falkye]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.20.1,1.21)"
+
+# Обязательные зависимости для улучшения визуала
+[[dependencies.bm_falkye]]
+modId="geckolib"
+mandatory=true
+versionRange="[4.0,)"
+ordering="BEFORE"
+
+[[dependencies.bm_falkye]]
+modId="patchouli"
+mandatory=true
+versionRange="[1.0,)"
+ordering="BEFORE"
+
+[[dependencies.bm_falkye]]
+modId="creativecore"
+mandatory=true
+versionRange="[1.0,)"
+ordering="BEFORE"
+
+[[dependencies.bm_falkye]]
+modId="citadel"
+mandatory=true
+versionRange="[1.0,)"
+ordering="BEFORE"
+
+# Опциональные зависимости для улучшения функциональности
+[[dependencies.bm_falkye]]
+modId="jei"
+mandatory=false
+versionRange="[11.0,)"
+ordering="AFTER"
+side="CLIENT"
+
+[[dependencies.bm_falkye]]
+modId="curios"
+mandatory=false
+versionRange="[5.0,)"
+ordering="AFTER"
+side="BOTH"
+

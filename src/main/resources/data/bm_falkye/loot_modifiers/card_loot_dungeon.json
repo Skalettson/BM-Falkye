@@ -1,0 +1,14 @@
+{
+  "type": "bm_falkye:card_loot",
+  "conditions": [
+    {
+      "condition": "forge:loot_table_id",
+      "loot_table_id": "minecraft:chests/simple_dungeon"
+    }
+  ],
+  "commonChance": 0.60,
+  "rareChance": 0.30,
+  "epicChance": 0.12,
+  "legendaryChance": 0.06
+}
+

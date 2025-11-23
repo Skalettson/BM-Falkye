@@ -1,0 +1,66 @@
+{
+  "card_play": {
+    "sounds": [
+      "entity.player.levelup",
+      "item.book.page_turn"
+    ],
+    "subtitle": "Карта разыграна"
+  },
+  "card_draw": {
+    "sounds": [
+      "item.book.page_turn",
+      "ui.button.click"
+    ],
+    "subtitle": "Карта взята"
+  },
+  "victory": {
+    "sounds": [
+      "entity.player.levelup",
+      "entity.experience_orb.pickup"
+    ],
+    "subtitle": "Победа!"
+  },
+  "defeat": {
+    "sounds": [
+      "entity.villager.no",
+      "entity.player.hurt"
+    ],
+    "subtitle": "Поражение"
+  },
+  "round_end": {
+    "sounds": [
+      "ui.toast.in",
+      "block.note_block.pling"
+    ],
+    "subtitle": "Раунд завершён"
+  },
+  "game_start": {
+    "sounds": [
+      "ui.toast.in",
+      "entity.experience_orb.pickup"
+    ],
+    "subtitle": "Игра началась"
+  },
+  "fire_effect": {
+    "sounds": [
+      "block.fire.ambient",
+      "entity.blaze.shoot"
+    ],
+    "subtitle": "Огненный эффект"
+  },
+  "frost_effect": {
+    "sounds": [
+      "block.glass.break",
+      "block.snow.place"
+    ],
+    "subtitle": "Ледяной эффект"
+  },
+  "nature_effect": {
+    "sounds": [
+      "block.grass.place",
+      "block.note_block.pling"
+    ],
+    "subtitle": "Природный эффект"
+  }
+}
+

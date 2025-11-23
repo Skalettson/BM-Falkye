@@ -1,0 +1,13 @@
+{
+  "type": "bm_falkye:card_loot",
+  "conditions": [
+    {
+      "condition": "forge:loot_table_id",
+      "loot_table_id": "minecraft:chests/village"
+    }
+  ],
+  "commonChance": 0.50,
+  "rareChance": 0.25,
+  "epicChance": 0.10,
+  "legendaryChance": 0.05
+}

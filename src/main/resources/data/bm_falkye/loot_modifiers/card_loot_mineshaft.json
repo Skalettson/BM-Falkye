@@ -1,0 +1,14 @@
+{
+  "type": "bm_falkye:card_loot",
+  "conditions": [
+    {
+      "condition": "forge:loot_table_id",
+      "loot_table_id": "minecraft:chests/abandoned_mineshaft"
+    }
+  ],
+  "commonChance": 0.45,
+  "rareChance": 0.20,
+  "epicChance": 0.08,
+  "legendaryChance": 0.04
+}
+

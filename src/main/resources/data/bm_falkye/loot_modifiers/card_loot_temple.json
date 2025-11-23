@@ -1,0 +1,13 @@
+{
+  "type": "bm_falkye:card_loot",
+  "conditions": [
+    {
+      "condition": "forge:loot_table_id",
+      "loot_table_id": "minecraft:chests/jungle_temple"
+    }
+  ],
+  "commonChance": 0.55,
+  "rareChance": 0.28,
+  "epicChance": 0.12,
+  "legendaryChance": 0.06
+}

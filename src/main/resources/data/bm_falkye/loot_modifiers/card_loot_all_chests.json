@@ -1,0 +1,9 @@
+{
+  "type": "bm_falkye:card_loot",
+  "conditions": [],
+  "commonChance": 0.50,
+  "rareChance": 0.25,
+  "epicChance": 0.10,
+  "legendaryChance": 0.05
+}
+

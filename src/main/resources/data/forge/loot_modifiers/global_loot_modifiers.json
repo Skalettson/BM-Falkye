@@ -1,0 +1,13 @@
+{
+  "replace": false,
+  "entries": [
+    "bm_falkye:card_loot_all_chests",
+    "bm_falkye:card_loot_village",
+    "bm_falkye:card_loot_dungeon",
+    "bm_falkye:card_loot_stronghold",
+    "bm_falkye:card_loot_mineshaft",
+    "bm_falkye:card_loot_temple",
+    "bm_falkye:card_loot_desert_temple"
+  ]
+}
+
