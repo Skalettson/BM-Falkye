@@ -340,8 +340,9 @@ public class FalkyeGameScreen extends Screen {
         // Кнопка "Ближний бой" - используем CreativeCore если доступен
         Button meleeBtn = GuiUtils.createStyledButton(
             buttonX, buttonY, buttonWidth, buttonHeight,
-            Component.literal("§6⚔ Ближний бой"),
+            Component.translatable("button.bm_falkye.melee_row").withStyle(net.minecraft.ChatFormatting.GOLD),
             (btn) -> {
+                com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
                 playCard(selectedCard, FalkyeGameSession.CardRow.MELEE);
                 selectedCard = null;
                 selectedCardIndex = -1;
@@ -354,8 +355,9 @@ public class FalkyeGameScreen extends Screen {
         // Кнопка "Дальний бой" - используем CreativeCore если доступен
         Button rangedBtn = GuiUtils.createStyledButton(
             buttonX, buttonY + buttonHeight + buttonSpacing, buttonWidth, buttonHeight,
-            Component.literal("§e🏹 Дальний бой"),
+            Component.translatable("button.bm_falkye.ranged_row").withStyle(net.minecraft.ChatFormatting.YELLOW),
             (btn) -> {
+                com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
                 playCard(selectedCard, FalkyeGameSession.CardRow.RANGED);
                 selectedCard = null;
                 selectedCardIndex = -1;
@@ -368,8 +370,9 @@ public class FalkyeGameScreen extends Screen {
         // Кнопка "Осада" - используем CreativeCore если доступен
         Button siegeBtn = GuiUtils.createStyledButton(
             buttonX, buttonY + (buttonHeight + buttonSpacing) * 2, buttonWidth, buttonHeight,
-            Component.literal("§c🏰 Осада"),
+            Component.translatable("button.bm_falkye.siege_row").withStyle(net.minecraft.ChatFormatting.RED),
             (btn) -> {
+                com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
                 playCard(selectedCard, FalkyeGameSession.CardRow.SIEGE);
                 selectedCard = null;
                 selectedCardIndex = -1;
@@ -382,8 +385,9 @@ public class FalkyeGameScreen extends Screen {
         // Кнопка "Отмена" - используем CreativeCore если доступен
         Button cancelBtn = GuiUtils.createStyledButton(
             buttonX, buttonY + (buttonHeight + buttonSpacing) * 3, buttonWidth, buttonHeight,
-            Component.literal("§7Отмена"),
+            Component.translatable("gui.cancel").withStyle(net.minecraft.ChatFormatting.GRAY),
             (btn) -> {
+                com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
                 selectedCard = null;
                 selectedCardIndex = -1;
                 clearRowSelectionButtons();
@@ -826,8 +830,9 @@ public class FalkyeGameScreen extends Screen {
                 buttonX + buttonWidth / 2, buttonY - 20, 0xFFFFFF);
             
             // Подсказка
-            guiGraphics.drawCenteredString(this.font, 
-                Component.literal("§7Выберите ряд для игры"), 
+            net.minecraft.network.chat.MutableComponent hint = Component.translatable("screen.bm_falkye.select_row_hint")
+                .withStyle(net.minecraft.network.chat.Style.EMPTY.withColor(net.minecraft.ChatFormatting.GRAY));
+            guiGraphics.drawCenteredString(this.font, hint, 
                 buttonX + buttonWidth / 2, buttonY - 10, 0xCCCCCC);
             }
         
@@ -1013,20 +1018,23 @@ public class FalkyeGameScreen extends Screen {
             description = this.font.plainSubstrByWidth(description, descMaxWidth - 5) + "...";
         }
         int descY = titleY + lineHeight;
-        guiGraphics.drawCenteredString(this.font, 
-            Component.literal("§7" + description), 
+        net.minecraft.network.chat.MutableComponent desc = Component.literal(description)
+            .withStyle(net.minecraft.network.chat.Style.EMPTY.withColor(net.minecraft.ChatFormatting.GRAY));
+        guiGraphics.drawCenteredString(this.font, desc, 
             infoX + infoWidth / 2, descY, 0xCCCCCC);
         
         // Сила (редкость убрана, так как визуально видна по цвету рамки)
         int powerY = descY + lineHeight;
-        guiGraphics.drawCenteredString(this.font, 
-            Component.literal("§eСила: §f" + selectedCard.getPower()), 
+        net.minecraft.network.chat.MutableComponent power = Component.translatable("screen.bm_falkye.power", selectedCard.getPower())
+            .withStyle(net.minecraft.network.chat.Style.EMPTY.withColor(net.minecraft.ChatFormatting.YELLOW));
+        guiGraphics.drawCenteredString(this.font, power, 
             infoX + infoWidth / 2, powerY, 0xFFFFFF);
         
         // Подсказка
         int hintY = powerY + lineHeight;
-        guiGraphics.drawCenteredString(this.font, 
-            Component.literal("§7Выберите ряд для игры"), 
+        net.minecraft.network.chat.MutableComponent hint = Component.translatable("screen.bm_falkye.select_row_hint")
+            .withStyle(net.minecraft.network.chat.Style.EMPTY.withColor(net.minecraft.ChatFormatting.GRAY));
+        guiGraphics.drawCenteredString(this.font, hint, 
             infoX + infoWidth / 2, hintY, 0xCCCCCC);
     }
 
@@ -1108,21 +1116,24 @@ public class FalkyeGameScreen extends Screen {
         currentY += lineHeight;
         
         // Победные раунды
-        guiGraphics.drawString(this.font, 
-            Component.literal("§7§a" + roundsWon1 + "§7/§c" + roundsWon2), 
+        net.minecraft.network.chat.MutableComponent roundsWon = Component.translatable("screen.bm_falkye.rounds_won", 
+            Component.literal(String.valueOf(roundsWon1)).withStyle(net.minecraft.ChatFormatting.GREEN),
+            Component.literal(String.valueOf(roundsWon2)).withStyle(net.minecraft.ChatFormatting.RED))
+            .withStyle(net.minecraft.network.chat.Style.EMPTY.withColor(net.minecraft.ChatFormatting.GRAY));
+        guiGraphics.drawString(this.font, roundsWon, 
             textX, currentY, 0xFFFFFF, false);
         currentY += lineHeight;
         
         // Погода (компактно)
         if (session.getWeather() != FalkyeGameSession.WeatherType.NONE) {
-            String weatherText = switch (session.getWeather()) {
-                case FROST -> "§b❄";
-                case FOG -> "§7☁";
-                case RAIN -> "§9🌧";
-                default -> "";
+            net.minecraft.network.chat.MutableComponent weatherText = switch (session.getWeather()) {
+                case FROST -> Component.translatable("screen.bm_falkye.weather_frost").withStyle(net.minecraft.ChatFormatting.AQUA);
+                case FOG -> Component.literal("☁").withStyle(net.minecraft.ChatFormatting.GRAY);
+                case RAIN -> Component.literal("🌧").withStyle(net.minecraft.ChatFormatting.BLUE);
+                default -> Component.empty();
             };
             guiGraphics.drawString(this.font, 
-                Component.literal(weatherText), 
+                weatherText, 
                 textX, currentY, 0xFFFFFF, false);
             currentY += lineHeight;
         }

@@ -3,27 +3,33 @@ package com.bmfalkye.client;
 import com.bmfalkye.cards.Card;
 import com.bmfalkye.cards.CardRegistry;
 import com.bmfalkye.client.gui.AdaptiveLayout;
+import com.bmfalkye.client.gui.GuiUtils;
+import com.bmfalkye.client.gui.SimpleCardRenderer;
 import com.bmfalkye.network.NetworkHandler;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.ChatFormatting;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Экран драфта - выбор карт для "Великого Турнира"
+ * Полностью переписан с нуля с исправлением всех визуальных багов и полной адаптивностью
+ * Использует актуальное API Minecraft Forge 1.20.1
+ * Дата: 23 ноября 2025
  */
 public class DraftScreen extends Screen {
-    private static final int BASE_GUI_WIDTH = 900;
-    private static final int BASE_GUI_HEIGHT = 600;
-    private static final int MIN_GUI_WIDTH = 800;
-    private static final int MIN_GUI_HEIGHT = 500;
+    private static final int BASE_GUI_WIDTH = 1000;
+    private static final int BASE_GUI_HEIGHT = 700;
+    private static final int MIN_GUI_WIDTH = 850;
+    private static final int MIN_GUI_HEIGHT = 600;
     private static final double MAX_SCREEN_RATIO = 0.9;
     
-    private int GUI_WIDTH;
-    private int GUI_HEIGHT;
     private AdaptiveLayout layout;
     
     // Данные драфта
@@ -40,13 +46,12 @@ public class DraftScreen extends Screen {
     }
     
     public DraftScreen(Screen parentScreen) {
-        super(Component.literal("§6§lВЕЛИКИЙ ТУРНИР - ДРАФТ"));
+        super(Component.translatable("screen.bm_falkye.draft_title"));
         this.parentScreen = parentScreen;
         requestDraftData();
     }
     
     private void requestDraftData() {
-        // Запрашиваем данные драфта с сервера
         NetworkHandler.INSTANCE.sendToServer(new NetworkHandler.RequestDraftDataPacket());
     }
     
@@ -70,70 +75,192 @@ public class DraftScreen extends Screen {
         this.currentChoiceIndex = currentIndex;
         this.selectedCards = new ArrayList<>(selected);
         this.draftCompleted = completed;
+        
+        if (this.minecraft != null && this.minecraft.screen == this) {
+            this.init();
+        }
     }
     
     @Override
     protected void init() {
         super.init();
+        this.clearWidgets();
         
         this.layout = new AdaptiveLayout(this, BASE_GUI_WIDTH, BASE_GUI_HEIGHT, 
                                          MAX_SCREEN_RATIO, MIN_GUI_WIDTH, MIN_GUI_HEIGHT);
-        this.GUI_WIDTH = layout.getGuiWidth();
-        this.GUI_HEIGHT = layout.getGuiHeight();
         
         // Кнопка "Назад"
-        Button backButton = createStyledButton(
+        Button backButton = GuiUtils.createStyledButton(
             layout.getX(2), layout.getY(2), layout.getWidth(15), layout.getHeight(5),
-            Component.literal("§7Назад"),
+            Component.translatable("gui.back").withStyle(ChatFormatting.GRAY),
             (btn) -> {
-                if (parentScreen != null) {
+                com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
+                if (parentScreen != null && minecraft != null) {
                     minecraft.setScreen(parentScreen);
-                } else {
+                } else if (minecraft != null) {
                     minecraft.setScreen(new FalkyeMainMenuScreen());
                 }
             }
         );
         this.addRenderableWidget(backButton);
         
-        // Кнопки выбора карт (если есть выбор)
-        if (!draftCompleted && currentChoice.size() == 3) {
-            int cardButtonWidth = layout.getWidth(25);
-            int cardButtonHeight = layout.getHeight(40);
-            int cardSpacing = layout.getWidth(3);
-            int totalWidth = cardButtonWidth * 3 + cardSpacing * 2;
-            int startX = (width - totalWidth) / 2;
-            int cardY = layout.getY(50);
-            
-            for (int i = 0; i < 3; i++) {
-                final int cardIndex = i;
-                Card card = currentChoice.get(i);
-                if (card != null) {
-                    Button cardButton = createStyledButton(
-                        startX + i * (cardButtonWidth + cardSpacing),
-                        cardY,
-                        cardButtonWidth,
-                        cardButtonHeight,
-                        Component.literal("§6Выбрать"),
-                        (btn) -> selectCard(cardIndex)
-                    );
-                    this.addRenderableWidget(cardButton);
-                }
-            }
-        }
-        
         // Кнопка начала арены (если драфт завершён)
         if (draftCompleted) {
-            Button startArenaButton = createStyledButton(
-                layout.getX(40), layout.getY(60), layout.getWidth(20), layout.getHeight(6),
-                Component.literal("§6§lНачать Арену"),
+            Button startArenaButton = GuiUtils.createStyledButton(
+                layout.getCenteredX(layout.getWidth(25)), layout.getY(75), 
+                layout.getWidth(25), layout.getHeight(8),
+                Component.translatable("screen.bm_falkye.start_arena")
+                    .withStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true)),
                 (btn) -> {
-                    // Отправляем запрос на начало арены
-                    com.bmfalkye.network.NetworkHandler.INSTANCE.sendToServer(
-                        new com.bmfalkye.network.NetworkHandler.StartArenaPacket());
+                    com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
+                    NetworkHandler.INSTANCE.sendToServer(new NetworkHandler.StartArenaPacket());
                 }
             );
             this.addRenderableWidget(startArenaButton);
         }
+    }
+    
+    @Override
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        if (layout == null || layout.needsRecalculation()) {
+            layout = new AdaptiveLayout(this, BASE_GUI_WIDTH, BASE_GUI_HEIGHT, 
+                                         MAX_SCREEN_RATIO, MIN_GUI_WIDTH, MIN_GUI_HEIGHT);
+        }
+        
+        this.renderBackground(graphics);
+        
+        int guiX = layout.getGuiX();
+        int guiY = layout.getGuiY();
+        int GUI_WIDTH = layout.getGuiWidth();
+        int GUI_HEIGHT = layout.getGuiHeight();
+        
+        // Красивый фон окна
+        GuiUtils.drawWoodenPanel(graphics, guiX, guiY, GUI_WIDTH, GUI_HEIGHT, true);
+        GuiUtils.drawMetalFrame(graphics, guiX, guiY, GUI_WIDTH, GUI_HEIGHT, 3, true);
+        
+        // Заголовок с тенью
+        MutableComponent title = Component.translatable(draftCompleted ? 
+            "screen.bm_falkye.draft_completed" : "screen.bm_falkye.draft_title")
+            .withStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true));
+        int titleWidth = this.font.width(title);
+        int titleX = layout.getCenteredX(titleWidth);
+        int titleY = layout.getY(3);
+        
+        // Тень заголовка
+        graphics.drawString(this.font, title, titleX + 2, titleY + 2, 0x000000, false);
+        // Сам заголовок
+        graphics.drawString(this.font, title, titleX, titleY, 0xFFFFFF, false);
+        
+        // Разделитель
+        int dividerY = layout.getY(8);
+        graphics.fill(guiX + layout.getWidth(5), dividerY, 
+            guiX + GUI_WIDTH - layout.getWidth(5), dividerY + 2, 0xFFFFA500);
+        
+        if (draftCompleted) {
+            // Драфт завершён
+            MutableComponent completed = Component.translatable("screen.bm_falkye.draft_successfully_completed")
+                .withStyle(Style.EMPTY.withColor(ChatFormatting.GREEN).withBold(true));
+            graphics.drawCenteredString(this.font, completed, 
+                layout.getCenteredX(this.font.width(completed)), layout.getY(50), 0xFFFFFF);
+            
+            MutableComponent hint = Component.translatable("screen.bm_falkye.press_button_to_start_arena")
+                .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY));
+            graphics.drawCenteredString(this.font, hint, 
+                layout.getCenteredX(this.font.width(hint)), layout.getY(60), 0x888888);
+        } else {
+            // Прогресс
+            MutableComponent progress = Component.translatable("screen.bm_falkye.draft_progress", 
+                currentChoiceIndex + 1, totalChoices)
+                .withStyle(Style.EMPTY.withColor(ChatFormatting.YELLOW));
+            graphics.drawString(this.font, progress, layout.getX(5), layout.getY(12), 0xFFFFFF, false);
+            
+            // Выбранные карты
+            MutableComponent selected = Component.translatable("screen.bm_falkye.cards_selected", 
+                selectedCards.size(), totalChoices)
+                .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY));
+            graphics.drawString(this.font, selected, layout.getX(5), layout.getY(15), 0xFFFFFF, false);
+            
+            if (currentChoice.size() == 3) {
+                // Рисуем 3 карты на выбор
+                renderCardChoices(graphics, mouseX, mouseY);
+                
+                // Инструкция
+                MutableComponent instruction = Component.translatable("screen.bm_falkye.select_one_of_three_cards")
+                    .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY));
+                graphics.drawCenteredString(this.font, instruction, 
+                    layout.getCenteredX(this.font.width(instruction)), 
+                    layout.getBottomY(layout.getHeight(8), 2), 0x888888);
+            } else {
+                // Загрузка
+                MutableComponent loading = Component.translatable("screen.bm_falkye.loading_card_choice")
+                    .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY));
+                graphics.drawCenteredString(this.font, loading, 
+                    layout.getCenteredX(this.font.width(loading)), 
+                    layout.getY(50), 0x888888);
+            }
+        }
+        
+        // Рендерим кнопки
+        for (net.minecraft.client.gui.components.Renderable renderable : this.renderables) {
+            if (renderable instanceof Button btn && btn.visible) {
+                GuiUtils.renderStyledButton(graphics, this.font, btn, mouseX, mouseY, false);
+            }
+        }
+    }
+    
+    private void renderCardChoices(GuiGraphics graphics, int mouseX, int mouseY) {
+        int cardsAreaY = layout.getY(20);
+        int cardsAreaHeight = layout.getGuiHeight() - cardsAreaY - layout.getHeight(15);
+        int cardWidth = Math.min(layout.getWidth(28), 220);
+        int cardHeight = (int)(cardWidth * 1.4f);
+        int cardSpacing = layout.getWidth(3);
+        int totalWidth = cardWidth * 3 + cardSpacing * 2;
+        int startX = layout.getCenteredX(totalWidth);
+        
+        for (int i = 0; i < 3; i++) {
+            Card card = currentChoice.get(i);
+            if (card == null) continue;
+            
+            int cardX = startX + i * (cardWidth + cardSpacing);
+            int cardY = cardsAreaY;
+            
+            boolean isHovered = mouseX >= cardX && mouseX <= cardX + cardWidth && 
+                               mouseY >= cardY && mouseY <= cardY + cardHeight;
+            
+            // Рендерим карту
+            SimpleCardRenderer.renderCard(graphics, this.font, card, cardX, cardY, 
+                cardWidth, cardHeight, mouseX, mouseY, isHovered, false);
+            
+            // Кнопка выбора (невидимая, но кликабельная)
+            // Клик обрабатывается в mouseClicked
+        }
+    }
+    
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 0 && !draftCompleted && currentChoice.size() == 3) {
+            int cardsAreaY = layout.getY(20);
+            int cardWidth = Math.min(layout.getWidth(28), 220);
+            int cardHeight = (int)(cardWidth * 1.4f);
+            int cardSpacing = layout.getWidth(3);
+            int totalWidth = cardWidth * 3 + cardSpacing * 2;
+            int startX = layout.getCenteredX(totalWidth);
+            
+            for (int i = 0; i < 3; i++) {
+                int cardX = startX + i * (cardWidth + cardSpacing);
+                int cardY = cardsAreaY;
+                
+                if (mouseX >= cardX && mouseX <= cardX + cardWidth &&
+                    mouseY >= cardY && mouseY <= cardY + cardHeight) {
+                    
+                    com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
+                    selectCard(i);
+                    return true;
+                }
+            }
+        }
+        
+        return super.mouseClicked(mouseX, mouseY, button);
     }
     
     private void selectCard(int cardIndex) {
@@ -161,149 +288,7 @@ public class DraftScreen extends Screen {
     }
     
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
-        
-        int guiX = (width - GUI_WIDTH) / 2;
-        int guiY = (height - GUI_HEIGHT) / 2;
-        
-        // Рисуем фон
-        graphics.fill(guiX, guiY, guiX + GUI_WIDTH, guiY + GUI_HEIGHT, 0xC0101010);
-        graphics.fill(guiX + 1, guiY + 1, guiX + GUI_WIDTH - 1, guiY + GUI_HEIGHT - 1, 0xFF2C2C2C);
-        
-        // Заголовок
-        String title = draftCompleted ? "§6§lДРАФТ ЗАВЕРШЁН" : "§6§lВЕЛИКИЙ ТУРНИР - ДРАФТ";
-        graphics.drawString(font, title, guiX + 20, guiY + 15, 0xFFFFFF, false);
-        
-        // Прогресс
-        String progress = "Выбор " + (currentChoiceIndex + 1) + " из " + totalChoices;
-        graphics.drawString(font, "§7" + progress, guiX + 20, guiY + 35, 0x888888, false);
-        
-        // Выбранные карты
-        graphics.drawString(font, "§7Выбрано карт: §f" + selectedCards.size() + " / 30", 
-            guiX + 20, guiY + 50, 0x888888, false);
-        
-        if (draftCompleted) {
-            // Драфт завершён - показываем кнопку начала арены
-            graphics.drawString(font, "§a§lДрафт успешно завершён!", 
-                guiX + GUI_WIDTH / 2 - 100, guiY + GUI_HEIGHT / 2, 0x00FF00, false);
-            graphics.drawString(font, "§7Нажмите кнопку ниже, чтобы начать арену", 
-                guiX + GUI_WIDTH / 2 - 120, guiY + GUI_HEIGHT / 2 + 20, 0x888888, false);
-        } else if (currentChoice.size() == 3) {
-            // Рисуем 3 карты на выбор
-            int cardWidth = 200;
-            int cardHeight = 280;
-            int cardSpacing = 30;
-            int totalWidth = cardWidth * 3 + cardSpacing * 2;
-            int startX = guiX + (GUI_WIDTH - totalWidth) / 2;
-            int cardY = guiY + 80;
-            
-            for (int i = 0; i < 3; i++) {
-                Card card = currentChoice.get(i);
-                if (card != null) {
-                    renderCard(graphics, card, startX + i * (cardWidth + cardSpacing), cardY, 
-                               cardWidth, cardHeight, mouseX, mouseY);
-                }
-            }
-            
-            // Инструкция
-            graphics.drawString(font, "§7Выберите одну из трёх карт", 
-                guiX + GUI_WIDTH / 2 - 80, guiY + GUI_HEIGHT - 50, 0x888888, false);
-        } else {
-            // Загрузка
-            graphics.drawString(font, "§7Загрузка выбора карт...", 
-                guiX + GUI_WIDTH / 2 - 80, guiY + GUI_HEIGHT / 2, 0x888888, false);
-        }
-        
-        super.render(graphics, mouseX, mouseY, partialTick);
-    }
-    
-    private void renderCard(GuiGraphics graphics, Card card, int x, int y, int width, int height, 
-                           int mouseX, int mouseY) {
-        boolean isHovered = mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
-        
-        // Фон карты
-        int bgColor = isHovered ? 0xFF444444 : 0xFF333333;
-        graphics.fill(x, y, x + width, y + height, bgColor);
-        graphics.fill(x + 1, y + 1, x + width - 1, y + height - 1, 0xFF1A1A1A);
-        
-        // Рамка по редкости
-        String rarityColor = getRarityColor(card.getRarity());
-        graphics.fill(x, y, x + width, y + 3, parseColor(rarityColor + "FF"));
-        
-        // Название карты
-        String name = card.getName();
-        if (name.length() > 20) {
-            name = name.substring(0, 17) + "...";
-        }
-        graphics.drawString(font, rarityColor + name, x + 5, y + 10, 0xFFFFFF, false);
-        
-        // Сила карты
-        graphics.drawString(font, "§fСила: §e" + card.getPower(), x + 5, y + 25, 0xFFFFFF, false);
-        
-        // Тип карты
-        String typeName = card.getType().toString();
-        graphics.drawString(font, "§7Тип: §f" + typeName, 
-            x + 5, y + 40, 0x888888, false);
-        
-        // Описание (сокращённое)
-        String description = card.getDescription();
-        if (description.length() > 100) {
-            description = description.substring(0, 97) + "...";
-        }
-        // Разбиваем описание на строки
-        int descY = y + 60;
-        int maxWidth = width - 10;
-        String[] words = description.split(" ");
-        StringBuilder line = new StringBuilder();
-        for (String word : words) {
-            String testLine = line.length() > 0 ? line + " " + word : word;
-            if (font.width(testLine) > maxWidth) {
-                if (line.length() > 0) {
-                    graphics.drawString(font, "§7" + line.toString(), x + 5, descY, 0x888888, false);
-                    descY += 12;
-                    line = new StringBuilder(word);
-                } else {
-                    graphics.drawString(font, "§7" + word, x + 5, descY, 0x888888, false);
-                    descY += 12;
-                }
-            } else {
-                line.append(line.length() > 0 ? " " + word : word);
-            }
-        }
-        if (line.length() > 0) {
-            graphics.drawString(font, "§7" + line.toString(), x + 5, descY, 0x888888, false);
-        }
-        
-        // Редкость внизу
-        graphics.drawString(font, rarityColor + "§l" + card.getRarity().getDisplayName(), 
-            x + 5, y + height - 20, 0xFFFFFF, false);
-    }
-    
-    private String getRarityColor(com.bmfalkye.cards.CardRarity rarity) {
-        if (rarity == com.bmfalkye.cards.CardRarity.COMMON) return "§f";
-        if (rarity == com.bmfalkye.cards.CardRarity.RARE) return "§b";
-        if (rarity == com.bmfalkye.cards.CardRarity.EPIC) return "§5";
-        if (rarity == com.bmfalkye.cards.CardRarity.LEGENDARY) return "§6";
-        return "§f";
-    }
-    
-    private int parseColor(String colorCode) {
-        // Простой парсер цветов Minecraft
-        if (colorCode.startsWith("§")) {
-            colorCode = colorCode.substring(2);
-        }
-        try {
-            return Integer.parseUnsignedInt(colorCode, 16);
-        } catch (NumberFormatException e) {
-            return 0xFFFFFFFF;
-        }
-    }
-    
-    private Button createStyledButton(int x, int y, int width, int height, Component text, Button.OnPress onPress) {
-        return Button.builder(text, onPress)
-            .bounds(x, y, width, height)
-            .build();
+    public boolean isPauseScreen() {
+        return false;
     }
 }
-

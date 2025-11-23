@@ -1,26 +1,34 @@
 package com.bmfalkye.client;
 
+import com.bmfalkye.client.gui.AdaptiveLayout;
 import com.bmfalkye.client.gui.GuiUtils;
-import com.bmfalkye.client.gui.StyledCardCollectionButton;
 import com.bmfalkye.network.NetworkHandler;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.ChatFormatting;
 
 import java.util.HashMap;
 import java.util.Map;
 
 /**
  * Красивый и информативный экран статистики игрока
+ * Полностью переписан с нуля с исправлением всех визуальных багов и полной адаптивностью
+ * Использует актуальное API Minecraft Forge 1.20.1
+ * Дата: 23 ноября 2025
  */
 public class StatisticsScreen extends Screen {
-    private static final int GUI_WIDTH = 600;
-    private static final int GUI_HEIGHT = 400;
+    private static final int BASE_GUI_WIDTH = 800;
+    private static final int BASE_GUI_HEIGHT = 550;
+    private static final int MIN_GUI_WIDTH = 700;
+    private static final int MIN_GUI_HEIGHT = 450;
+    private static final double MAX_SCREEN_RATIO = 0.9;
     
-    private int guiX;
-    private int guiY;
+    private AdaptiveLayout layout;
     private int scrollOffset = 0;
     
     // Данные статистики
@@ -34,57 +42,62 @@ public class StatisticsScreen extends Screen {
     private int rating = 1000;
     private com.bmfalkye.rating.RatingSystem.Rank rank = com.bmfalkye.rating.RatingSystem.Rank.BRONZE;
     private int level = 1;
-    private String mostPlayedCard = "Нет данных";
+    private String mostPlayedCard = null;
     private Map<String, Integer> factionWins = new HashMap<>();
     
     private boolean dataLoaded = false;
-    private final net.minecraft.client.gui.screens.Screen parentScreen;
+    private final Screen parentScreen;
     
     public StatisticsScreen() {
         this(null);
     }
     
-    public StatisticsScreen(net.minecraft.client.gui.screens.Screen parentScreen) {
-        super(Component.literal("§b§lСТАТИСТИКА"));
+    public StatisticsScreen(Screen parentScreen) {
+        super(Component.translatable("screen.bm_falkye.statistics_title"));
         this.parentScreen = parentScreen;
     }
     
     @Override
     protected void init() {
         super.init();
+        this.clearWidgets();
         
-        this.guiX = (this.width - GUI_WIDTH) / 2;
-        this.guiY = (this.height - GUI_HEIGHT) / 2;
+        this.layout = new AdaptiveLayout(this, BASE_GUI_WIDTH, BASE_GUI_HEIGHT, 
+                                         MAX_SCREEN_RATIO, MIN_GUI_WIDTH, MIN_GUI_HEIGHT);
         
         // Запрашиваем данные с сервера
         if (!dataLoaded) {
             NetworkHandler.INSTANCE.sendToServer(new NetworkHandler.RequestStatisticsPacket());
         }
         
-        // Кнопка "Обновить"
-        Button refreshButton = new StyledCardCollectionButton(
-            guiX + GUI_WIDTH - 110, guiY + GUI_HEIGHT - 35, 90, 20,
-            Component.literal("§eОбновить"),
-            (btn) -> {
-                dataLoaded = false;
-                NetworkHandler.INSTANCE.sendToServer(new NetworkHandler.RequestStatisticsPacket());
-            }
-        );
-        this.addRenderableWidget(refreshButton);
-        
         // Кнопка "Назад"
-        Button backButton = new StyledCardCollectionButton(
-            guiX + 20, guiY + GUI_HEIGHT - 35, 100, 20,
-            Component.literal("§7Назад"),
+        Button backButton = GuiUtils.createStyledButton(
+            layout.getX(2), layout.getBottomY(layout.getHeight(5), 2), 
+            layout.getWidth(15), layout.getHeight(5),
+            Component.translatable("gui.back").withStyle(ChatFormatting.GRAY),
             (btn) -> {
-                if (parentScreen != null) {
-                    this.minecraft.setScreen(parentScreen);
-                } else {
+                com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
+                if (parentScreen != null && minecraft != null) {
+                    minecraft.setScreen(parentScreen);
+                } else if (minecraft != null) {
                     this.onClose();
                 }
             }
         );
         this.addRenderableWidget(backButton);
+        
+        // Кнопка "Обновить"
+        Button refreshButton = GuiUtils.createStyledButton(
+            layout.getRightX(layout.getWidth(15), 2), layout.getBottomY(layout.getHeight(5), 2), 
+            layout.getWidth(15), layout.getHeight(5),
+            Component.translatable("gui.refresh").withStyle(ChatFormatting.YELLOW),
+            (btn) -> {
+                com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
+                dataLoaded = false;
+                NetworkHandler.INSTANCE.sendToServer(new NetworkHandler.RequestStatisticsPacket());
+            }
+        );
+        this.addRenderableWidget(refreshButton);
     }
     
     public void updateStatistics(FriendlyByteBuf data) {
@@ -99,6 +112,9 @@ public class StatisticsScreen extends Screen {
         rank = com.bmfalkye.rating.RatingSystem.Rank.values()[data.readInt()];
         level = data.readInt();
         mostPlayedCard = data.readUtf();
+        if (mostPlayedCard.isEmpty()) {
+            mostPlayedCard = null;
+        }
         
         int factionCount = data.readInt();
         factionWins.clear();
@@ -111,108 +127,189 @@ public class StatisticsScreen extends Screen {
     
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        // Пересчитываем layout при изменении размера экрана
+        if (layout == null || layout.needsRecalculation()) {
+            layout = new AdaptiveLayout(this, BASE_GUI_WIDTH, BASE_GUI_HEIGHT, 
+                                         MAX_SCREEN_RATIO, MIN_GUI_WIDTH, MIN_GUI_HEIGHT);
+        }
+        
         this.renderBackground(guiGraphics);
         
-        // ПЕРЕПИСАНО: Фон в скевоморфном стиле
-        GuiUtils.drawWoodenPanel(guiGraphics, guiX, guiY, GUI_WIDTH, GUI_HEIGHT, true);
-        GuiUtils.drawMetalFrame(guiGraphics, guiX, guiY, GUI_WIDTH, GUI_HEIGHT, 2, false);
+        int guiX = layout.getGuiX();
+        int guiY = layout.getGuiY();
+        int GUI_WIDTH = layout.getGuiWidth();
+        int GUI_HEIGHT = layout.getGuiHeight();
         
-        // Заголовок с иконкой
-        guiGraphics.drawCenteredString(this.font, 
-            Component.literal("§b§l══════ СТАТИСТИКА ИГРОКА ══════"),
-            guiX + GUI_WIDTH / 2, guiY + 15, 0xFFFFFF);
+        // Красивый фон окна
+        GuiUtils.drawWoodenPanel(guiGraphics, guiX, guiY, GUI_WIDTH, GUI_HEIGHT, true);
+        GuiUtils.drawMetalFrame(guiGraphics, guiX, guiY, GUI_WIDTH, GUI_HEIGHT, 3, true);
+        
+        // Заголовок с тенью
+        MutableComponent title = Component.translatable("screen.bm_falkye.player_statistics")
+            .withStyle(Style.EMPTY.withColor(ChatFormatting.AQUA).withBold(true));
+        int titleWidth = this.font.width(title);
+        int titleX = layout.getCenteredX(titleWidth);
+        int titleY = layout.getY(3);
+        
+        // Тень заголовка
+        guiGraphics.drawString(this.font, title, titleX + 2, titleY + 2, 0x000000, false);
+        // Сам заголовок
+        guiGraphics.drawString(this.font, title, titleX, titleY, 0xFFFFFF, false);
         
         // Разделитель
-        guiGraphics.fill(guiX + 20, guiY + 40, guiX + GUI_WIDTH - 20, guiY + 42, 0xFF4A90E2);
+        int dividerY = layout.getY(8);
+        guiGraphics.fill(guiX + layout.getWidth(5), dividerY, 
+            guiX + GUI_WIDTH - layout.getWidth(5), dividerY + 2, 0xFF4A90E2);
         
-        int y = guiY + 55;
+        int contentY = layout.getY(11);
+        int contentHeight = GUI_HEIGHT - contentY - layout.getHeight(10);
+        int contentX = layout.getX(3);
+        int contentWidth = GUI_WIDTH - contentX * 2;
+        
+        // Обрезка контента
+        guiGraphics.enableScissor(contentX, contentY, contentX + contentWidth, contentY + contentHeight);
         
         if (!dataLoaded) {
-            guiGraphics.drawCenteredString(this.font, 
-                Component.literal("§7Загрузка статистики..."),
-                guiX + GUI_WIDTH / 2, y + 50, 0xFFFFFF);
-            super.render(guiGraphics, mouseX, mouseY, partialTick);
-            return;
+            MutableComponent loading = Component.translatable("screen.bm_falkye.loading_statistics")
+                .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY));
+            guiGraphics.drawCenteredString(this.font, loading, 
+                layout.getCenteredX(this.font.width(loading)), contentY + contentHeight / 2, 0xFFFFFF);
+        } else {
+            renderStatisticsContent(guiGraphics, contentX, contentY, contentWidth, contentHeight);
         }
         
-        // Основная статистика (левая колонка)
-        int leftX = guiX + 30;
-        int rightX = guiX + GUI_WIDTH / 2 + 20;
+        guiGraphics.disableScissor();
         
-        // Заголовок секции
-        guiGraphics.drawString(this.font, Component.literal("§6§lОбщая статистика"), 
-            leftX, y, 0xFFFFFF, false);
-        y += 20;
+        // Рендерим кнопки
+        for (net.minecraft.client.gui.components.Renderable renderable : this.renderables) {
+            if (renderable instanceof Button btn && btn.visible) {
+                GuiUtils.renderStyledButton(guiGraphics, this.font, btn, mouseX, mouseY, false);
+            }
+        }
+    }
+    
+    private void renderStatisticsContent(GuiGraphics guiGraphics, int x, int y, int width, int height) {
+        int leftX = x;
+        int rightX = x + width / 2 + 10;
+        int currentY = y;
+        int lineHeight = 16;
+        int sectionSpacing = 20;
         
-        // Игры
-        guiGraphics.drawString(this.font, Component.literal("§7Всего игр: §f" + totalGames), 
-            leftX, y, 0xFFFFFF, false);
-        y += 15;
-        guiGraphics.drawString(this.font, Component.literal("§aПобед: §f" + wins), 
-            leftX, y, 0xFFFFFF, false);
-        y += 15;
-        guiGraphics.drawString(this.font, Component.literal("§cПоражений: §f" + losses), 
-            leftX, y, 0xFFFFFF, false);
-        y += 15;
-        guiGraphics.drawString(this.font, Component.literal("§eПроцент побед: §f" + 
-            String.format("%.1f", winRate) + "%"), 
-            leftX, y, 0xFFFFFF, false);
-        y += 25;
+        // Левая колонка - Общая статистика
+        MutableComponent sectionTitle = Component.translatable("screen.bm_falkye.general_statistics")
+            .withStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true));
+        guiGraphics.drawString(this.font, sectionTitle, leftX, currentY, 0xFFFFFF, false);
+        currentY += lineHeight + 5;
+        
+        // Всего игр
+        MutableComponent totalGamesText = Component.translatable("screen.bm_falkye.total_games", totalGames)
+            .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY));
+        guiGraphics.drawString(this.font, totalGamesText, leftX, currentY, 0xFFFFFF, false);
+        currentY += lineHeight;
+        
+        // Побед
+        MutableComponent winsText = Component.translatable("screen.bm_falkye.wins", wins)
+            .withStyle(Style.EMPTY.withColor(ChatFormatting.GREEN));
+        guiGraphics.drawString(this.font, winsText, leftX, currentY, 0xFFFFFF, false);
+        currentY += lineHeight;
+        
+        // Поражений
+        MutableComponent lossesText = Component.translatable("screen.bm_falkye.losses", losses)
+            .withStyle(Style.EMPTY.withColor(ChatFormatting.RED));
+        guiGraphics.drawString(this.font, lossesText, leftX, currentY, 0xFFFFFF, false);
+        currentY += lineHeight;
+        
+        // Процент побед
+        MutableComponent winRateText = Component.translatable("screen.bm_falkye.win_rate", 
+            String.format("%.1f", winRate))
+            .withStyle(Style.EMPTY.withColor(ChatFormatting.YELLOW));
+        guiGraphics.drawString(this.font, winRateText, leftX, currentY, 0xFFFFFF, false);
+        currentY += sectionSpacing;
         
         // Раунды
-        guiGraphics.drawString(this.font, Component.literal("§6§lРаунды"), 
-            leftX, y, 0xFFFFFF, false);
-        y += 20;
-        guiGraphics.drawString(this.font, Component.literal("§aВыиграно: §f" + roundsWon), 
-            leftX, y, 0xFFFFFF, false);
-        y += 15;
-        guiGraphics.drawString(this.font, Component.literal("§cПроиграно: §f" + roundsLost), 
-            leftX, y, 0xFFFFFF, false);
-        y += 15;
-        guiGraphics.drawString(this.font, Component.literal("§eПроцент побед: §f" + 
-            String.format("%.1f", roundWinRate) + "%"), 
-            leftX, y, 0xFFFFFF, false);
+        MutableComponent roundsTitle = Component.translatable("screen.bm_falkye.rounds")
+            .withStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true));
+        guiGraphics.drawString(this.font, roundsTitle, leftX, currentY, 0xFFFFFF, false);
+        currentY += lineHeight + 5;
         
-        // Правая колонка
-        y = guiY + 55;
+        // Выиграно раундов
+        MutableComponent roundsWonText = Component.translatable("screen.bm_falkye.rounds_won", roundsWon)
+            .withStyle(Style.EMPTY.withColor(ChatFormatting.GREEN));
+        guiGraphics.drawString(this.font, roundsWonText, leftX, currentY, 0xFFFFFF, false);
+        currentY += lineHeight;
+        
+        // Проиграно раундов
+        MutableComponent roundsLostText = Component.translatable("screen.bm_falkye.rounds_lost", roundsLost)
+            .withStyle(Style.EMPTY.withColor(ChatFormatting.RED));
+        guiGraphics.drawString(this.font, roundsLostText, leftX, currentY, 0xFFFFFF, false);
+        currentY += lineHeight;
+        
+        // Процент побед в раундах
+        MutableComponent roundWinRateText = Component.translatable("screen.bm_falkye.round_win_rate", 
+            String.format("%.1f", roundWinRate))
+            .withStyle(Style.EMPTY.withColor(ChatFormatting.YELLOW));
+        guiGraphics.drawString(this.font, roundWinRateText, leftX, currentY, 0xFFFFFF, false);
+        
+        // Правая колонка - Рейтинг и фракции
+        currentY = y;
         
         // Рейтинг и ранг
-        guiGraphics.drawString(this.font, Component.literal("§6§lРейтинг"), 
-            rightX, y, 0xFFFFFF, false);
-        y += 20;
-        guiGraphics.drawString(this.font, Component.literal("§7Рейтинг: §f" + rating), 
-            rightX, y, 0xFFFFFF, false);
-        y += 15;
-        guiGraphics.drawString(this.font, Component.literal("§7Ранг: " + rank.getColorCode() + 
-            rank.getDisplayName()), 
-            rightX, y, 0xFFFFFF, false);
-        y += 15;
-        guiGraphics.drawString(this.font, Component.literal("§7Уровень: §f" + level), 
-            rightX, y, 0xFFFFFF, false);
-        y += 25;
+        MutableComponent ratingTitle = Component.translatable("screen.bm_falkye.rating")
+            .withStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true));
+        guiGraphics.drawString(this.font, ratingTitle, rightX, currentY, 0xFFFFFF, false);
+        currentY += lineHeight + 5;
         
-        // Фракции
-        guiGraphics.drawString(this.font, Component.literal("§6§lПобеды по фракциям"), 
-            rightX, y, 0xFFFFFF, false);
-        y += 20;
-        for (Map.Entry<String, Integer> entry : factionWins.entrySet()) {
-            guiGraphics.drawString(this.font, Component.literal("§7" + entry.getKey() + ": §a" + 
-                entry.getValue()), 
-                rightX, y, 0xFFFFFF, false);
-            y += 15;
+        // Рейтинг
+        MutableComponent ratingText = Component.translatable("screen.bm_falkye.rating_value", rating)
+            .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY));
+        guiGraphics.drawString(this.font, ratingText, rightX, currentY, 0xFFFFFF, false);
+        currentY += lineHeight;
+        
+        // Ранг
+        String rankColorCode = rank.getColorCode();
+        ChatFormatting rankColor = ChatFormatting.getByName(rankColorCode.replace("§", ""));
+        if (rankColor == null) {
+            rankColor = ChatFormatting.GOLD;
         }
-        y += 10;
+        MutableComponent rankText = Component.translatable("screen.bm_falkye.rank", rank.getDisplayName())
+            .withStyle(Style.EMPTY.withColor(rankColor));
+        guiGraphics.drawString(this.font, rankText, rightX, currentY, 0xFFFFFF, false);
+        currentY += lineHeight;
+        
+        // Уровень
+        MutableComponent levelText = Component.translatable("screen.bm_falkye.level", level)
+            .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY));
+        guiGraphics.drawString(this.font, levelText, rightX, currentY, 0xFFFFFF, false);
+        currentY += sectionSpacing;
+        
+        // Победы по фракциям
+        if (!factionWins.isEmpty()) {
+            MutableComponent factionTitle = Component.translatable("screen.bm_falkye.faction_wins")
+                .withStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true));
+            guiGraphics.drawString(this.font, factionTitle, rightX, currentY, 0xFFFFFF, false);
+            currentY += lineHeight + 5;
+            
+            for (Map.Entry<String, Integer> entry : factionWins.entrySet()) {
+                MutableComponent factionText = Component.translatable("screen.bm_falkye.faction_wins_count", 
+                    entry.getKey(), entry.getValue())
+                    .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY));
+                guiGraphics.drawString(this.font, factionText, rightX, currentY, 0xFFFFFF, false);
+                currentY += lineHeight;
+            }
+            currentY += 5;
+        }
         
         // Самая используемая карта
-        if (!mostPlayedCard.equals("Нет данных")) {
-            guiGraphics.drawString(this.font, Component.literal("§6§lСамая используемая карта"), 
-                rightX, y, 0xFFFFFF, false);
-            y += 20;
-            guiGraphics.drawString(this.font, Component.literal("§7" + mostPlayedCard), 
-                rightX, y, 0xFFFFFF, false);
+        if (mostPlayedCard != null && !mostPlayedCard.isEmpty()) {
+            MutableComponent cardTitle = Component.translatable("screen.bm_falkye.most_played_card")
+                .withStyle(Style.EMPTY.withColor(ChatFormatting.GOLD).withBold(true));
+            guiGraphics.drawString(this.font, cardTitle, rightX, currentY, 0xFFFFFF, false);
+            currentY += lineHeight + 5;
+            
+            MutableComponent cardText = Component.literal(mostPlayedCard)
+                .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY));
+            guiGraphics.drawString(this.font, cardText, rightX, currentY, 0xFFFFFF, false);
         }
-        
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
     }
     
     @Override

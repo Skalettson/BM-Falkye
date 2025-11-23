@@ -1,29 +1,47 @@
 package com.bmfalkye.client;
 
 import com.bmfalkye.client.gui.GuiUtils;
+import com.bmfalkye.client.gui.AdaptiveLayout;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.ChatFormatting;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Экран с руководством и правилами игры Falkye
- * Реализовано в стиле BM Characters
+ * Полностью переписан с нуля с исправлением всех визуальных багов и полной адаптивностью
+ * Использует актуальное API Minecraft Forge 1.20.1
+ * Дата: 23 ноября 2025
  */
 public class FalkyeTutorialScreen extends Screen {
-    private static final int GUI_WIDTH = 600;
-    private static final int GUI_HEIGHT = 400;
+    // Базовые размеры для адаптации
+    private static final int BASE_GUI_WIDTH = 620;
+    private static final int BASE_GUI_HEIGHT = 420;
+    private static final int MIN_GUI_WIDTH = 500;
+    private static final int MIN_GUI_HEIGHT = 350;
+    private static final double MAX_SCREEN_RATIO = 0.90;
     
-    private int guiX;
-    private int guiY;
+    private int GUI_WIDTH;
+    private int GUI_HEIGHT;
+    
+    // Система автоматической адаптации
+    private AdaptiveLayout layout;
+    
     private double scrollOffset = 0.0;
     private static final int LINE_HEIGHT = 12;
     private int contentHeight = 0;
     private Screen parentScreen; // Экран, из которого открыли правила
-
+    
+    // Кнопки
+    private Button backButton;
+    private final List<Button> buttons = new ArrayList<>();
+    
     public FalkyeTutorialScreen() {
         this(null);
     }
@@ -36,37 +54,56 @@ public class FalkyeTutorialScreen extends Screen {
     @Override
     protected void init() {
         super.init();
+        this.clearWidgets();
+        buttons.clear();
         
-        this.guiX = (this.width - GUI_WIDTH) / 2;
-        this.guiY = (this.height - GUI_HEIGHT) / 2;
+        // Инициализируем систему автоматической адаптации
+        this.layout = new AdaptiveLayout(this, BASE_GUI_WIDTH, BASE_GUI_HEIGHT, 
+                                         MAX_SCREEN_RATIO, MIN_GUI_WIDTH, MIN_GUI_HEIGHT);
+        this.GUI_WIDTH = layout.getGuiWidth();
+        this.GUI_HEIGHT = layout.getGuiHeight();
         
-        // Кнопка "Назад" (стилизованная)
-        Button backButton = GuiUtils.createStyledButton(
-            guiX + GUI_WIDTH / 2 - 50, guiY + GUI_HEIGHT - 35, 100, 25,
+        // Вычисляем высоту контента
+        contentHeight = getTotalLines() * LINE_HEIGHT;
+        
+        // Адаптивные размеры кнопки
+        int buttonWidth = Math.max(100, layout.getWidth(30));
+        int buttonHeight = Math.max(20, layout.getHeight(5));
+        int buttonY = layout.getBottomY(buttonHeight, 5);
+        
+        // Кнопка "Назад"
+        this.backButton = GuiUtils.createStyledButton(
+            layout.getCenteredX(buttonWidth), buttonY, buttonWidth, buttonHeight,
             Component.translatable("button.bm_falkye.back"),
             (button) -> {
-                if (parentScreen != null) {
+                if (parentScreen != null && minecraft != null) {
                     this.minecraft.setScreen(parentScreen);
                 } else {
                     this.onClose();
                 }
             }
         );
-        this.addRenderableWidget(backButton);
-        
-        // Вычисляем высоту контента
-        contentHeight = getTotalLines() * LINE_HEIGHT;
+        this.addRenderableWidget(this.backButton);
+        buttons.add(this.backButton);
     }
     
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (layout == null) return super.mouseScrolled(mouseX, mouseY, delta);
+        
+        int guiX = layout.getGuiX();
+        int guiY = layout.getGuiY();
+        int textStartY = guiY + 50;
+        int textEndY = guiY + GUI_HEIGHT - 60;
+        int visibleHeight = textEndY - textStartY;
+        
         // Проверяем, находится ли мышь в области контента
         if (mouseX >= guiX && mouseX <= guiX + GUI_WIDTH && 
-            mouseY >= guiY + 50 && mouseY <= guiY + GUI_HEIGHT - 50) {
-            int visibleHeight = (GUI_HEIGHT - 100);
+            mouseY >= textStartY && mouseY <= textEndY) {
             int maxScroll = Math.max(0, contentHeight - visibleHeight);
             if (maxScroll > 0) {
-                double newScrollOffset = scrollOffset - delta * LINE_HEIGHT * 3; // Увеличиваем скорость скролла
+                double scrollSpeed = LINE_HEIGHT * 3;
+                double newScrollOffset = scrollOffset - delta * scrollSpeed;
                 scrollOffset = Math.max(0, Math.min(maxScroll, newScrollOffset));
                 return true;
             }
@@ -76,67 +113,83 @@ public class FalkyeTutorialScreen extends Screen {
 
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        // Пересчитываем layout при изменении размера экрана
+        if (layout == null || layout.needsRecalculation()) {
+            layout = new AdaptiveLayout(this, BASE_GUI_WIDTH, BASE_GUI_HEIGHT, 
+                                         MAX_SCREEN_RATIO, MIN_GUI_WIDTH, MIN_GUI_HEIGHT);
+            GUI_WIDTH = layout.getGuiWidth();
+            GUI_HEIGHT = layout.getGuiHeight();
+            contentHeight = getTotalLines() * LINE_HEIGHT;
+        }
+        
         this.renderBackground(guiGraphics);
         
-        // ПЕРЕПИСАНО: Рисуем фон окна в скевоморфном стиле (деревянная панель)
+        int guiX = layout.getGuiX();
+        int guiY = layout.getGuiY();
+        
+        // Красивый фон окна
         GuiUtils.drawWoodenPanel(guiGraphics, guiX, guiY, GUI_WIDTH, GUI_HEIGHT, true);
         // Металлическая рамка
         GuiUtils.drawMetalFrame(guiGraphics, guiX, guiY, GUI_WIDTH, GUI_HEIGHT, 2, false);
         
-        // Заголовок
-        Component titleComponent = Component.translatable("screen.bm_falkye.tutorial_title");
+        // Заголовок с тенью
+        MutableComponent titleComponent = Component.translatable("screen.bm_falkye.tutorial_title")
+            .withStyle(Style.EMPTY
+                .withColor(ChatFormatting.GOLD)
+                .withBold(true));
         int titleWidth = this.font.width(titleComponent);
         int titleX = guiX + (GUI_WIDTH - titleWidth) / 2;
         int titleY = guiY + 15;
-        // Тень заголовка (черная)
+        // Тень заголовка
         guiGraphics.drawString(this.font, titleComponent, titleX + 2, titleY + 2, 0x000000, false);
         // Сам заголовок
         guiGraphics.drawString(this.font, titleComponent, titleX, titleY, 0xFFFFFF, false);
         
         // Разделитель
-        guiGraphics.fill(guiX + 20, guiY + 40, guiX + GUI_WIDTH - 20, guiY + 41, 0xFF4A3A2A);
+        int separatorY = guiY + 40;
+        guiGraphics.fill(guiX + 20, separatorY, guiX + GUI_WIDTH - 20, separatorY + 1, 0xFF4A3A2A);
         
         // Рендерим текст руководства
         renderTutorialText(guiGraphics);
         
-        // Рендерим виджеты (кнопки)
-        for (net.minecraft.client.gui.components.Renderable renderable : this.renderables) {
-            if (renderable instanceof Button button) {
+        // Рендерим кнопки
+        for (Button button : buttons) {
+            if (button != null && button.visible) {
                 GuiUtils.renderStyledButton(guiGraphics, this.font, button, mouseX, mouseY, false);
-            } else {
-                renderable.render(guiGraphics, mouseX, mouseY, partialTick);
             }
         }
     }
     
     private void renderTutorialText(GuiGraphics guiGraphics) {
+        if (layout == null) return;
+        
         List<String> lines = getTutorialLines();
-        int startY = guiY + 50;
+        int guiX = layout.getGuiX();
+        int guiY = layout.getGuiY();
+        int textStartY = guiY + 50;
+        int textEndY = guiY + GUI_HEIGHT - 60;
         int textX = guiX + 30;
-        int maxY = guiY + GUI_HEIGHT - 50;
-        int visibleHeight = maxY - startY;
+        int visibleHeight = textEndY - textStartY;
         
         // Вычисляем начальную строку на основе scrollOffset
-        int startLine = (int)(scrollOffset / LINE_HEIGHT);
-        int endLine = Math.min(startLine + (visibleHeight / LINE_HEIGHT) + 1, lines.size());
+        int startLine = Math.max(0, (int)(scrollOffset / LINE_HEIGHT));
+        int endLine = Math.min(startLine + (visibleHeight / LINE_HEIGHT) + 2, lines.size());
         
         for (int i = startLine; i < endLine; i++) {
-            int y = startY + (i - startLine) * LINE_HEIGHT - (int)(scrollOffset % LINE_HEIGHT);
-            if (y + LINE_HEIGHT > maxY) break;
-            if (y < startY) continue;
+            int lineY = textStartY + (i - startLine) * LINE_HEIGHT - (int)(scrollOffset % LINE_HEIGHT);
+            if (lineY + LINE_HEIGHT > textEndY) break;
+            if (lineY < textStartY) continue;
             
             String line = lines.get(i);
-            // Если строка содержит цветовые коды §, Component.literal() обработает их сам
-            // Для строк без § кодов используем цвет из getLineColor()
             Component textComponent = Component.literal(line);
             int color = getLineColor(line);
-            guiGraphics.drawString(this.font, textComponent, textX, y, color, false);
+            guiGraphics.drawString(this.font, textComponent, textX, lineY, color, false);
         }
         
         // Рисуем scrollbar справа
         if (contentHeight > visibleHeight) {
             int scrollbarX = guiX + GUI_WIDTH - 20;
-            int scrollbarY = startY;
+            int scrollbarY = textStartY;
             int scrollbarHeight = visibleHeight;
             int scrollbarWidth = 6;
             
@@ -147,7 +200,7 @@ public class FalkyeTutorialScreen extends Screen {
             int maxScroll = contentHeight - visibleHeight;
             if (maxScroll > 0) {
                 double scrollRatio = Math.max(0, Math.min(1, scrollOffset / maxScroll));
-                int thumbHeight = Math.max(10, (int)(scrollbarHeight * (visibleHeight / (double)contentHeight)));
+                int thumbHeight = Math.max(10, (int)(scrollbarHeight * ((double)visibleHeight / contentHeight)));
                 int thumbY = scrollbarY + (int)(scrollRatio * (scrollbarHeight - thumbHeight));
                 guiGraphics.fill(scrollbarX, thumbY, scrollbarX + scrollbarWidth, thumbY + thumbHeight, 0xFF8B7355);
             }
@@ -156,9 +209,8 @@ public class FalkyeTutorialScreen extends Screen {
     
     private int getLineColor(String line) {
         // Если строка содержит цветовые коды §, Component.literal() обработает их,
-        // и параметр color в drawString() будет проигнорирован - это нормально
+        // и параметр color в drawString() будет проигнорирован
         if (line.startsWith("§")) {
-            // Уже содержит цветовой код - цвет будет из кода
             return 0xFFFFFF; // Значение игнорируется, но нужно для совместимости
         }
         if (line.startsWith("  ")) {
@@ -177,7 +229,15 @@ public class FalkyeTutorialScreen extends Screen {
         List<String> lines = new ArrayList<>();
         
         // Определяем язык (упрощённо - проверяем локализацию)
-        boolean isRussian = net.minecraft.client.Minecraft.getInstance().options.languageCode.startsWith("ru");
+        boolean isRussian = false;
+        try {
+            if (minecraft != null && minecraft.options != null) {
+                isRussian = minecraft.options.languageCode != null && 
+                           minecraft.options.languageCode.startsWith("ru");
+            }
+        } catch (Exception e) {
+            // Игнорируем ошибки
+        }
         
         if (isRussian) {
             lines.add("§6═══════════════════════════════════════");
@@ -383,4 +443,3 @@ public class FalkyeTutorialScreen extends Screen {
         return false;
     }
 }
-

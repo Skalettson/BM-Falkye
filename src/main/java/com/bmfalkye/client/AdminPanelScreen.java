@@ -10,6 +10,9 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.ChatFormatting;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.ArrayList;
@@ -99,13 +102,19 @@ public class AdminPanelScreen extends Screen {
         int tabButtonHeight = layout.getHeight(5);
         int tabSpacing = layout.getSpacing();
         
-        String[] tabNames = {"Карты", "Опыт/Уровень", "Статистика", "Реплеи", "События", "Сезоны", "Достижения", "Рейтинг", "Монеты"};
-        String[] tabColors = {"§e", "§b", "§a", "§3", "§6", "§e", "§d", "§c", "§2"};
+        String[] tabKeys = {"screen.bm_falkye.admin_tab_cards", "screen.bm_falkye.admin_tab_xp", 
+                             "screen.bm_falkye.admin_tab_stats", "screen.bm_falkye.admin_tab_replays",
+                             "screen.bm_falkye.admin_tab_events", "screen.bm_falkye.admin_tab_seasons",
+                             "screen.bm_falkye.admin_tab_achievements", "screen.bm_falkye.admin_tab_rating",
+                             "screen.bm_falkye.admin_tab_coins"};
+        ChatFormatting[] tabColors = {ChatFormatting.YELLOW, ChatFormatting.AQUA, ChatFormatting.GREEN,
+                                       ChatFormatting.DARK_AQUA, ChatFormatting.GOLD, ChatFormatting.YELLOW,
+                                       ChatFormatting.LIGHT_PURPLE, ChatFormatting.RED, ChatFormatting.DARK_GREEN};
         
         int tabStartX = layout.getX(3);
         int tabStartY = layout.getY(10);
         
-        for (int i = 0; i < tabNames.length; i++) {
+        for (int i = 0; i < tabKeys.length; i++) {
             int row = i / tabsPerRow;
             int col = i % tabsPerRow;
             int x = tabStartX + col * (tabButtonWidth + tabSpacing);
@@ -113,8 +122,9 @@ public class AdminPanelScreen extends Screen {
             
             final int tabIndex = i;
             Button tabBtn = createStyledButton(x, y, tabButtonWidth, tabButtonHeight,
-                Component.literal(tabColors[i] + tabNames[i]),
+                Component.translatable(tabKeys[i]).withStyle(tabColors[i]),
                 (btn) -> {
+                    com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
                     currentTab = tabIndex;
                     this.init();
                 });
@@ -123,7 +133,7 @@ public class AdminPanelScreen extends Screen {
         }
         
         // Поле имени игрока (общее для всех вкладок) - позиционируется после вкладок с учетом реальных размеров
-        int tabsRows = (tabNames.length + tabsPerRow - 1) / tabsPerRow; // Количество строк вкладок
+        int tabsRows = (tabKeys.length + tabsPerRow - 1) / tabsPerRow; // Количество строк вкладок
         int tabsTotalHeight = tabsRows * tabButtonHeight + (tabsRows - 1) * tabSpacing; // Реальная высота всех вкладок
         int playerNameY = tabStartY + tabsTotalHeight + layout.getSpacing() * 2; // Позиция после вкладок с отступом
         int inputWidth = layout.getWidth(28);

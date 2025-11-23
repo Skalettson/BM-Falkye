@@ -1,26 +1,34 @@
 package com.bmfalkye.client;
 
+import com.bmfalkye.client.gui.AdaptiveLayout;
 import com.bmfalkye.client.gui.GuiUtils;
-import com.bmfalkye.client.gui.StyledCardCollectionButton;
 import com.bmfalkye.network.NetworkHandler;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.ChatFormatting;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Красивый экран событий с таймерами
+ * Полностью переписан с нуля с исправлением всех визуальных багов и полной адаптивностью
+ * Использует актуальное API Minecraft Forge 1.20.1
+ * Дата: 23 ноября 2025
  */
 public class EventsScreen extends Screen {
-    private static final int GUI_WIDTH = 700;
-    private static final int GUI_HEIGHT = 450;
+    private static final int BASE_GUI_WIDTH = 850;
+    private static final int BASE_GUI_HEIGHT = 600;
+    private static final int MIN_GUI_WIDTH = 700;
+    private static final int MIN_GUI_HEIGHT = 500;
+    private static final double MAX_SCREEN_RATIO = 0.9;
     
-    private int guiX;
-    private int guiY;
+    private AdaptiveLayout layout;
     private int scrollOffset = 0;
     
     private static class EventInfo {
@@ -60,53 +68,61 @@ public class EventsScreen extends Screen {
     
     private List<EventInfo> events = new ArrayList<>();
     private boolean dataLoaded = false;
-    private final net.minecraft.client.gui.screens.Screen parentScreen;
+    private final Screen parentScreen;
+    
+    private static final int EVENT_CARD_HEIGHT = 120;
+    private static final int EVENT_CARD_SPACING = 10;
     
     public EventsScreen() {
         this(null);
     }
     
-    public EventsScreen(net.minecraft.client.gui.screens.Screen parentScreen) {
-        super(Component.literal("§5§lСОБЫТИЯ"));
+    public EventsScreen(Screen parentScreen) {
+        super(Component.translatable("screen.bm_falkye.events_title"));
         this.parentScreen = parentScreen;
     }
     
     @Override
     protected void init() {
         super.init();
+        this.clearWidgets();
         
-        this.guiX = (this.width - GUI_WIDTH) / 2;
-        this.guiY = (this.height - GUI_HEIGHT) / 2;
+        this.layout = new AdaptiveLayout(this, BASE_GUI_WIDTH, BASE_GUI_HEIGHT, 
+                                         MAX_SCREEN_RATIO, MIN_GUI_WIDTH, MIN_GUI_HEIGHT);
         
         // Запрашиваем данные с сервера
         if (!dataLoaded) {
             NetworkHandler.INSTANCE.sendToServer(new NetworkHandler.RequestEventsPacket());
         }
         
-        // Кнопка "Обновить"
-        Button refreshButton = new StyledCardCollectionButton(
-            guiX + GUI_WIDTH - 110, guiY + GUI_HEIGHT - 35, 90, 20,
-            Component.literal("§eОбновить"),
-            (btn) -> {
-                dataLoaded = false;
-                NetworkHandler.INSTANCE.sendToServer(new NetworkHandler.RequestEventsPacket());
-            }
-        );
-        this.addRenderableWidget(refreshButton);
-        
         // Кнопка "Назад"
-        Button backButton = new StyledCardCollectionButton(
-            guiX + 20, guiY + GUI_HEIGHT - 35, 100, 20,
-            Component.literal("§7Назад"),
+        Button backButton = GuiUtils.createStyledButton(
+            layout.getX(2), layout.getBottomY(layout.getHeight(5), 2), 
+            layout.getWidth(15), layout.getHeight(5),
+            Component.translatable("gui.back").withStyle(ChatFormatting.GRAY),
             (btn) -> {
-                if (parentScreen != null) {
-                    this.minecraft.setScreen(parentScreen);
-                } else {
+                com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
+                if (parentScreen != null && minecraft != null) {
+                    minecraft.setScreen(parentScreen);
+                } else if (minecraft != null) {
                     this.onClose();
                 }
             }
         );
         this.addRenderableWidget(backButton);
+        
+        // Кнопка "Обновить"
+        Button refreshButton = GuiUtils.createStyledButton(
+            layout.getRightX(layout.getWidth(15), 2), layout.getY(2), 
+            layout.getWidth(15), layout.getHeight(5),
+            Component.translatable("gui.refresh").withStyle(ChatFormatting.YELLOW),
+            (btn) -> {
+                com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
+                dataLoaded = false;
+                NetworkHandler.INSTANCE.sendToServer(new NetworkHandler.RequestEventsPacket());
+            }
+        );
+        this.addRenderableWidget(refreshButton);
     }
     
     public void updateEvents(FriendlyByteBuf data) {
@@ -123,7 +139,7 @@ public class EventsScreen extends Screen {
             event.rewardXP = data.readInt();
             event.rewardCoins = data.readInt();
             
-            // Читаем квасты (если есть)
+            // Читаем квесты (если есть)
             int questCount = data.readInt();
             for (int j = 0; j < questCount; j++) {
                 data.readUtf(); // type
@@ -142,139 +158,238 @@ public class EventsScreen extends Screen {
             events.add(event);
         }
         dataLoaded = true;
+        scrollOffset = 0;
     }
     
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        if (layout == null || layout.needsRecalculation()) {
+            layout = new AdaptiveLayout(this, BASE_GUI_WIDTH, BASE_GUI_HEIGHT, 
+                                         MAX_SCREEN_RATIO, MIN_GUI_WIDTH, MIN_GUI_HEIGHT);
+        }
+        
         this.renderBackground(guiGraphics);
         
-        // ПЕРЕПИСАНО: Фон в скевоморфном стиле
-        GuiUtils.drawWoodenPanel(guiGraphics, guiX, guiY, GUI_WIDTH, GUI_HEIGHT, true);
-        GuiUtils.drawMetalFrame(guiGraphics, guiX, guiY, GUI_WIDTH, GUI_HEIGHT, 2, false);
+        int guiX = layout.getGuiX();
+        int guiY = layout.getGuiY();
+        int GUI_WIDTH = layout.getGuiWidth();
+        int GUI_HEIGHT = layout.getGuiHeight();
         
-        // Заголовок
-        guiGraphics.drawCenteredString(this.font, 
-            Component.literal("§5§l══════ АКТИВНЫЕ СОБЫТИЯ ══════"),
-            guiX + GUI_WIDTH / 2, guiY + 15, 0xFFFFFF);
+        // Красивый фон окна
+        GuiUtils.drawWoodenPanel(guiGraphics, guiX, guiY, GUI_WIDTH, GUI_HEIGHT, true);
+        GuiUtils.drawMetalFrame(guiGraphics, guiX, guiY, GUI_WIDTH, GUI_HEIGHT, 3, true);
+        
+        // Заголовок с тенью
+        MutableComponent title = Component.translatable("screen.bm_falkye.active_events")
+            .withStyle(Style.EMPTY.withColor(ChatFormatting.DARK_PURPLE).withBold(true));
+        int titleWidth = this.font.width(title);
+        int titleX = layout.getCenteredX(titleWidth);
+        int titleY = layout.getY(3);
+        
+        // Тень заголовка
+        guiGraphics.drawString(this.font, title, titleX + 2, titleY + 2, 0x000000, false);
+        // Сам заголовок
+        guiGraphics.drawString(this.font, title, titleX, titleY, 0xFFFFFF, false);
         
         // Разделитель
-        guiGraphics.fill(guiX + 20, guiY + 40, guiX + GUI_WIDTH - 20, guiY + 42, 0xFF673AB7);
+        int dividerY = layout.getY(8);
+        guiGraphics.fill(guiX + layout.getWidth(5), dividerY, 
+            guiX + GUI_WIDTH - layout.getWidth(5), dividerY + 2, 0xFF673AB7);
         
-        int y = guiY + 55;
+        // Область событий
+        int eventsY = layout.getY(11);
+        int eventsHeight = GUI_HEIGHT - eventsY - layout.getHeight(10);
+        int eventsX = layout.getX(3);
+        int eventsWidth = GUI_WIDTH - eventsX * 2;
+        
+        // Обрезка событий
+        guiGraphics.enableScissor(eventsX, eventsY, eventsX + eventsWidth, eventsY + eventsHeight);
         
         if (!dataLoaded) {
-            guiGraphics.drawCenteredString(this.font, 
-                Component.literal("§7Загрузка событий..."),
-                guiX + GUI_WIDTH / 2, y + 50, 0xFFFFFF);
-            super.render(guiGraphics, mouseX, mouseY, partialTick);
-            return;
-        }
-        
-        if (events.isEmpty()) {
-            guiGraphics.drawCenteredString(this.font, 
-                Component.literal("§7Нет активных событий"),
-                guiX + GUI_WIDTH / 2, y + 50, 0xFFFFFF);
-            guiGraphics.drawCenteredString(this.font, 
-                Component.literal("§7Следите за объявлениями о новых событиях!"),
-                guiX + GUI_WIDTH / 2, y + 70, 0xCCCCCC);
+            MutableComponent loading = Component.translatable("screen.bm_falkye.loading_events")
+                .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY));
+            guiGraphics.drawCenteredString(this.font, loading, 
+                layout.getCenteredX(this.font.width(loading)), eventsY + eventsHeight / 2, 0xFFFFFF);
+        } else if (events.isEmpty()) {
+            MutableComponent empty = Component.translatable("screen.bm_falkye.no_active_events")
+                .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY));
+            guiGraphics.drawCenteredString(this.font, empty, 
+                layout.getCenteredX(this.font.width(empty)), eventsY + eventsHeight / 2, 0xFFFFFF);
+            
+            MutableComponent hint = Component.translatable("screen.bm_falkye.watch_for_events")
+                .withStyle(Style.EMPTY.withColor(ChatFormatting.DARK_GRAY));
+            guiGraphics.drawCenteredString(this.font, hint, 
+                layout.getCenteredX(this.font.width(hint)), eventsY + eventsHeight / 2 + 20, 0xCCCCCC);
         } else {
-            // Список событий
-            int startIndex = scrollOffset / 100;
-            int visibleCount = Math.min(events.size() - startIndex, 3);
+            renderEventsList(guiGraphics, eventsX, eventsY, eventsWidth, eventsHeight);
+        }
+        
+        guiGraphics.disableScissor();
+        
+        // Индикатор прокрутки
+        if (dataLoaded && !events.isEmpty()) {
+            int visibleCount = eventsHeight / (EVENT_CARD_HEIGHT + EVENT_CARD_SPACING);
+            int totalCount = events.size();
             
-            for (int i = 0; i < visibleCount; i++) {
-                int index = startIndex + i;
-                if (index >= events.size()) break;
+            if (totalCount > visibleCount) {
+                int scrollBarX = layout.getRightX(4, 2);
+                int scrollBarY = eventsY;
+                int scrollBarHeight = eventsHeight;
+                int scrollBarWidth = 4;
                 
-                EventInfo event = events.get(index);
-                int cardY = y + i * 100;
+                // Фон полосы прокрутки
+                guiGraphics.fill(scrollBarX, scrollBarY, scrollBarX + scrollBarWidth, 
+                    scrollBarY + scrollBarHeight, 0x66000000);
                 
-                // ПЕРЕПИСАНО: Фон карточки события в скевоморфном стиле
-                GuiUtils.drawLeatherElement(guiGraphics, guiX + 30, cardY, GUI_WIDTH - 60, 95);
-                GuiUtils.drawMetalFrame(guiGraphics, guiX + 30, cardY, GUI_WIDTH - 60, 95, 2, false);
-                
-                // Название
-                guiGraphics.drawString(this.font, Component.literal("§5§l" + event.name), 
-                    guiX + 40, cardY + 10, 0xFFFFFF, false);
-                
-                // ID (короткий)
-                guiGraphics.drawString(this.font, Component.literal("§7ID: §f" + event.id), 
-                    guiX + 40, cardY + 25, 0xFFFFFF, false);
-                
-                // Описание
-                String desc = event.description.length() > 60 ? 
-                    event.description.substring(0, 57) + "..." : event.description;
-                guiGraphics.drawString(this.font, Component.literal("§7" + desc), 
-                    guiX + 40, cardY + 40, 0xFFFFFF, false);
-                
-                // Таймер (используем реальное время из события)
-                long currentTimeRemaining = Math.max(0, event.timeRemaining);
-                String timeStr = formatTime(currentTimeRemaining);
-                guiGraphics.drawString(this.font, Component.literal("§7Осталось: §f" + timeStr), 
-                    guiX + 40, cardY + 55, 0xFFFFFF, false);
-                
-                // Статус участия
-                String participationStatus = event.participated ? "§aУчаствовали" : "§7Не участвовали";
-                guiGraphics.drawString(this.font, Component.literal(participationStatus), 
-                    guiX + 40, cardY + 70, 0xFFFFFF, false);
-                
-                // Награды
-                String rewards = "§7Награды: ";
-                if (event.rewardXP > 0) {
-                    rewards += "§b+" + event.rewardXP + " XP ";
-                }
-                if (event.rewardCoins > 0) {
-                    rewards += "§e+" + event.rewardCoins + " монет";
-                }
-                guiGraphics.drawString(this.font, Component.literal(rewards), 
-                    guiX + 40, cardY + 55, 0xFFFFFF, false);
-                
-                // Прогресс-бар времени (визуализация оставшегося времени)
-                int progressBarWidth = GUI_WIDTH - 100;
-                int progressBarHeight = 8;
-                int progressBarX = guiX + 40;
-                int progressBarY = cardY + 75;
-                
-                // Предполагаем, что событие длится 7 дней (604800000 мс)
-                long eventDuration = 604800000L;
-                float timeProgress = Math.min(1.0f, (float) currentTimeRemaining / eventDuration);
-                
-                // Простой прогресс-бар
-                int progressBgColor = 0xFF3A3A3A;
-                guiGraphics.fill(progressBarX, progressBarY, progressBarX + progressBarWidth, progressBarY + progressBarHeight, progressBgColor);
-                if (timeProgress > 0) {
-                    int fillColor = 0xFF673AB7;
-                    guiGraphics.fill(progressBarX + 1, progressBarY + 1, 
-                        progressBarX + (int)(progressBarWidth * timeProgress) - 1, 
-                        progressBarY + progressBarHeight - 1, fillColor);
-                }
-            }
-            
-            // Скроллбар
-            if (events.size() > 3) {
-                int scrollbarHeight = (GUI_HEIGHT - 100);
-                int scrollbarY = guiY + 55;
-                int scrollbarX = guiX + GUI_WIDTH - 25;
-                int thumbHeight = Math.max(20, scrollbarHeight * 3 / events.size());
-                int thumbY = scrollbarY + (scrollbarHeight - thumbHeight) * scrollOffset / 
-                    Math.max(1, (events.size() - 3) * 100);
-                
-                guiGraphics.fill(scrollbarX, scrollbarY, scrollbarX + 5, scrollbarY + scrollbarHeight, 0xFF404040);
-                guiGraphics.fill(scrollbarX, thumbY, scrollbarX + 5, thumbY + thumbHeight, 0xFF673AB7);
+                // Ползунок
+                int maxScroll = Math.max(1, totalCount - visibleCount);
+                int sliderHeight = Math.max(20, (int)((double)visibleCount / totalCount * scrollBarHeight));
+                int scrollStep = EVENT_CARD_HEIGHT + EVENT_CARD_SPACING;
+                int currentScrollIndex = scrollOffset / scrollStep;
+                int sliderY = scrollBarY + (int)((double)currentScrollIndex / maxScroll * (scrollBarHeight - sliderHeight));
+                guiGraphics.fill(scrollBarX, sliderY, scrollBarX + scrollBarWidth, 
+                    sliderY + sliderHeight, 0xFF8B7355);
             }
         }
         
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
+        // Рендерим кнопки
+        for (net.minecraft.client.gui.components.Renderable renderable : this.renderables) {
+            if (renderable instanceof Button btn && btn.visible) {
+                GuiUtils.renderStyledButton(guiGraphics, this.font, btn, mouseX, mouseY, false);
+            }
+        }
+    }
+    
+    private void renderEventsList(GuiGraphics guiGraphics, int x, int y, int width, int height) {
+        int visibleCount = height / (EVENT_CARD_HEIGHT + EVENT_CARD_SPACING);
+        int startIndex = scrollOffset / (EVENT_CARD_HEIGHT + EVENT_CARD_SPACING);
+        int endIndex = Math.min(startIndex + visibleCount + 1, events.size());
+        
+        int cardY = y - (scrollOffset % (EVENT_CARD_HEIGHT + EVENT_CARD_SPACING));
+        
+        for (int i = startIndex; i < endIndex; i++) {
+            if (i >= events.size()) break;
+            
+            EventInfo event = events.get(i);
+            int cardWidth = width - 10;
+            
+            // Фон карточки события
+            GuiUtils.drawLeatherElement(guiGraphics, x + 5, cardY, cardWidth, EVENT_CARD_HEIGHT);
+            GuiUtils.drawMetalFrame(guiGraphics, x + 5, cardY, cardWidth, EVENT_CARD_HEIGHT, 2, false);
+            
+            int textX = x + 15;
+            int textY = cardY + 10;
+            int lineHeight = 15;
+            
+            // Название
+            MutableComponent name = Component.literal(event.name)
+                .withStyle(Style.EMPTY.withColor(ChatFormatting.DARK_PURPLE).withBold(true));
+            guiGraphics.drawString(this.font, name, textX, textY, 0xFFFFFF, false);
+            textY += lineHeight + 5;
+            
+            // ID
+            MutableComponent id = Component.translatable("screen.bm_falkye.event_id", event.id)
+                .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY));
+            guiGraphics.drawString(this.font, id, textX, textY, 0xFFFFFF, false);
+            textY += lineHeight;
+            
+            // Описание
+            String description = event.description;
+            int maxDescWidth = cardWidth - 30;
+            if (this.font.width(description) > maxDescWidth) {
+                description = this.font.plainSubstrByWidth(description, maxDescWidth - 5) + "...";
+            }
+            MutableComponent desc = Component.literal(description)
+                .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY));
+            guiGraphics.drawString(this.font, desc, textX, textY, 0xFFFFFF, false);
+            textY += lineHeight;
+            
+            // Таймер
+            long currentTimeRemaining = Math.max(0, event.timeRemaining);
+            String timeStr = formatTime(currentTimeRemaining);
+            MutableComponent time = Component.translatable("screen.bm_falkye.time_remaining", timeStr)
+                .withStyle(Style.EMPTY.withColor(ChatFormatting.YELLOW));
+            guiGraphics.drawString(this.font, time, textX, textY, 0xFFFFFF, false);
+            
+            // Статус участия
+            MutableComponent participationStatus = Component.translatable(event.participated ? 
+                "screen.bm_falkye.participated" : "screen.bm_falkye.not_participated")
+                .withStyle(Style.EMPTY.withColor(event.participated ? ChatFormatting.GREEN : ChatFormatting.GRAY));
+            int statusX = x + cardWidth - this.font.width(participationStatus) - 15;
+            guiGraphics.drawString(this.font, participationStatus, statusX, cardY + 10, 0xFFFFFF, false);
+            
+            // Награды
+            MutableComponent rewards = Component.empty();
+            if (event.rewardXP > 0) {
+                rewards = rewards.append(Component.translatable("screen.bm_falkye.reward_xp", event.rewardXP)
+                    .withStyle(Style.EMPTY.withColor(ChatFormatting.AQUA)));
+            }
+            if (event.rewardCoins > 0) {
+                if (event.rewardXP > 0) {
+                    rewards = rewards.append(Component.literal(" "));
+                }
+                rewards = rewards.append(Component.translatable("screen.bm_falkye.reward_coins", event.rewardCoins)
+                    .withStyle(Style.EMPTY.withColor(ChatFormatting.YELLOW)));
+            }
+            int rewardsX = x + cardWidth - this.font.width(rewards) - 15;
+            guiGraphics.drawString(this.font, rewards, rewardsX, cardY + 25, 0xFFFFFF, false);
+            
+            // Прогресс-бар времени
+            long eventDuration = 604800000L; // 7 дней
+            float timeProgress = Math.min(1.0f, (float) currentTimeRemaining / eventDuration);
+            int progressBarWidth = cardWidth - 30;
+            int progressBarHeight = 8;
+            int progressBarX = textX;
+            int progressBarY = cardY + EVENT_CARD_HEIGHT - 20;
+            
+            // Фон прогресс-бара
+            guiGraphics.fill(progressBarX, progressBarY, progressBarX + progressBarWidth, 
+                progressBarY + progressBarHeight, 0xFF3A3A3A);
+            // Прогресс
+            if (timeProgress > 0) {
+                int progressWidth = (int)(progressBarWidth * timeProgress);
+                guiGraphics.fill(progressBarX, progressBarY, progressBarX + progressWidth, 
+                    progressBarY + progressBarHeight, 0xFF673AB7);
+            }
+            // Рамка
+            GuiUtils.drawRoundedBorder(guiGraphics, progressBarX, progressBarY, 
+                progressBarWidth, progressBarHeight, 0xFF555555, 1);
+            
+            cardY += EVENT_CARD_HEIGHT + EVENT_CARD_SPACING;
+        }
     }
     
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        if (events.size() > 3) {
-            scrollOffset = (int) Math.max(0, Math.min((events.size() - 3) * 100, 
-                scrollOffset - delta * 20));
-            return true;
+        if (layout == null || !dataLoaded || events.isEmpty()) {
+            return super.mouseScrolled(mouseX, mouseY, delta);
         }
-        return false;
+        
+        int eventsY = layout.getY(11);
+        int eventsHeight = layout.getGuiHeight() - eventsY - layout.getHeight(10);
+        int eventsX = layout.getX(3);
+        int eventsWidth = layout.getGuiWidth() - eventsX * 2;
+        
+        if (mouseX >= eventsX && mouseX <= eventsX + eventsWidth &&
+            mouseY >= eventsY && mouseY <= eventsY + eventsHeight) {
+            
+            int visibleCount = eventsHeight / (EVENT_CARD_HEIGHT + EVENT_CARD_SPACING);
+            int totalCount = events.size();
+            int maxScroll = Math.max(0, totalCount - visibleCount) * 
+                (EVENT_CARD_HEIGHT + EVENT_CARD_SPACING);
+            int scrollStep = EVENT_CARD_HEIGHT + EVENT_CARD_SPACING;
+            
+            if (delta < 0 && scrollOffset < maxScroll) {
+                scrollOffset = Math.min(maxScroll, scrollOffset + scrollStep);
+                com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
+                return true;
+            } else if (delta > 0 && scrollOffset > 0) {
+                scrollOffset = Math.max(0, scrollOffset - scrollStep);
+                com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
+                return true;
+            }
+        }
+        return super.mouseScrolled(mouseX, mouseY, delta);
     }
     
     @Override

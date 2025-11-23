@@ -1,180 +1,200 @@
 package com.bmfalkye.client;
 
 import com.bmfalkye.client.gui.GuiUtils;
+import com.bmfalkye.client.gui.AdaptiveLayout;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.ChatFormatting;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Главное меню Фальки с кнопками для всех систем
- * Адаптивный интерфейс с прокруткой
+ * Полностью переписан с нуля с исправлением всех визуальных багов и полной адаптивностью
+ * Использует актуальное API Minecraft Forge 1.20.1
+ * Дата: 23 ноября 2025
  */
 public class FalkyeMainMenuScreen extends Screen {
-    // Базовые размеры (адаптируются под разрешение)
-    private static final int BASE_GUI_WIDTH = 420;
-    private static final int BASE_GUI_HEIGHT = 400;
-    private static final int MIN_GUI_WIDTH = 350;
-    private static final int MIN_GUI_HEIGHT = 300;
-    private static final double MAX_SCREEN_RATIO = 0.85; // Максимум 85% экрана
+    // Базовые размеры для адаптации
+    private static final int BASE_GUI_WIDTH = 440;
+    private static final int BASE_GUI_HEIGHT = 420;
+    private static final int MIN_GUI_WIDTH = 360;
+    private static final int MIN_GUI_HEIGHT = 320;
+    private static final double MAX_SCREEN_RATIO = 0.85;
     
     private int GUI_WIDTH;
     private int GUI_HEIGHT;
     
-    private int guiX;
-    private int guiY;
-    private final List<Button> buttons = new ArrayList<>();
+    // Система автоматической адаптации
+    private AdaptiveLayout layout;
     
     // Параметры для прокрутки
     private int scrollOffset = 0;
     private int contentHeight = 0;
     private int visibleAreaHeight = 0;
-    private static final int BUTTON_HEIGHT = 30;
-    private static final int BUTTON_SPACING = 8;
-    private static final int HEADER_HEIGHT = 50;
+    private static final int BUTTON_HEIGHT = 28;
+    private static final int BUTTON_SPACING = 6;
+    private static final int HEADER_HEIGHT = 60;
     private static final int FOOTER_HEIGHT = 50;
+    
+    private final List<Button> buttons = new ArrayList<>();
     
     public FalkyeMainMenuScreen() {
         super(Component.empty()); // Заголовок рисуется вручную в render()
-    }
-    
-    /**
-     * Вычисляет адаптивные размеры окна
-     */
-    private void calculateAdaptiveSize() {
-        // Вычисляем максимальные размеры (85% экрана)
-        int maxWidth = (int)(this.width * MAX_SCREEN_RATIO);
-        int maxHeight = (int)(this.height * MAX_SCREEN_RATIO);
-        
-        // Используем базовые размеры, но не больше максимума и не меньше минимума
-        GUI_WIDTH = Math.max(MIN_GUI_WIDTH, Math.min(BASE_GUI_WIDTH, maxWidth));
-        GUI_HEIGHT = Math.max(MIN_GUI_HEIGHT, Math.min(BASE_GUI_HEIGHT, maxHeight));
     }
     
     @Override
     protected void init() {
         super.init();
         
-        // Вычисляем адаптивные размеры
-        calculateAdaptiveSize();
-        
-        // Очищаем все виджеты перед добавлением новых (предотвращает дублирование)
+        // Очищаем все виджеты
         this.clearWidgets();
         buttons.clear();
         
-        this.guiX = (this.width - GUI_WIDTH) / 2;
-        this.guiY = (this.height - GUI_HEIGHT) / 2;
+        // Инициализируем систему автоматической адаптации
+        this.layout = new AdaptiveLayout(this, BASE_GUI_WIDTH, BASE_GUI_HEIGHT, 
+                                         MAX_SCREEN_RATIO, MIN_GUI_WIDTH, MIN_GUI_HEIGHT);
+        this.GUI_WIDTH = layout.getGuiWidth();
+        this.GUI_HEIGHT = layout.getGuiHeight();
         
         // Вычисляем доступную высоту для кнопок
         visibleAreaHeight = GUI_HEIGHT - HEADER_HEIGHT - FOOTER_HEIGHT;
         
-        int buttonWidth = Math.min(280, GUI_WIDTH - 40);
-        int startX = guiX + (GUI_WIDTH - buttonWidth) / 2;
-        int startY = guiY + HEADER_HEIGHT;
+        int buttonWidth = Math.min(300, layout.getWidth(85));
+        int startX = layout.getCenteredX(buttonWidth);
+        int startY = layout.getY(15);
         
         // Список всех кнопок меню
         List<MenuButtonInfo> menuButtons = new ArrayList<>();
-        // Сохраняем ссылку на главное меню для передачи в дочерние экраны
         Screen mainMenu = this;
         
-        menuButtons.add(new MenuButtonInfo("§eКоллекция карт", () -> {
+        menuButtons.add(new MenuButtonInfo("Коллекция карт", ChatFormatting.YELLOW, () -> {
             com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
-            net.minecraft.client.Minecraft.getInstance().setScreen(new CardCollectionScreen(mainMenu));
+            if (minecraft != null) {
+                minecraft.setScreen(new CardCollectionScreen(mainMenu));
+            }
         }));
-        menuButtons.add(new MenuButtonInfo("§eРедактор колод", () -> {
+        menuButtons.add(new MenuButtonInfo("Редактор колод", ChatFormatting.YELLOW, () -> {
             com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
             com.bmfalkye.network.NetworkHandler.INSTANCE.sendToServer(
                 new com.bmfalkye.network.NetworkHandler.OpenDeckEditorPacket());
-            // Сохраняем ссылку на главное меню для DeckEditor (будет использовано при открытии)
             com.bmfalkye.client.ClientPacketHandler.setMainMenuParent(mainMenu);
         }));
-        menuButtons.add(new MenuButtonInfo("§eЭнциклопедия", () -> {
+        menuButtons.add(new MenuButtonInfo("Энциклопедия", ChatFormatting.YELLOW, () -> {
             com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
             com.bmfalkye.network.NetworkHandler.INSTANCE.sendToServer(
                 new com.bmfalkye.network.NetworkHandler.OpenEncyclopediaPacket());
-            // Сохраняем ссылку на главное меню для Encyclopedia (будет использовано при открытии)
             com.bmfalkye.client.ClientPacketHandler.setMainMenuParent(mainMenu);
         }));
-        menuButtons.add(new MenuButtonInfo("§6Эволюция карт", () -> {
+        menuButtons.add(new MenuButtonInfo("Эволюция карт", ChatFormatting.GOLD, () -> {
             com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
-            net.minecraft.client.Minecraft.getInstance().setScreen(new CardEvolutionScreen(mainMenu));
+            if (minecraft != null) {
+                minecraft.setScreen(new CardEvolutionScreen(mainMenu));
+            }
         }));
-        menuButtons.add(new MenuButtonInfo("§5Квесты", () -> {
+        menuButtons.add(new MenuButtonInfo("Квесты", ChatFormatting.DARK_PURPLE, () -> {
             com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
-            net.minecraft.client.Minecraft.getInstance().setScreen(new QuestScreen(mainMenu));
+            if (minecraft != null) {
+                minecraft.setScreen(new QuestScreen(mainMenu));
+            }
         }));
-        menuButtons.add(new MenuButtonInfo("§6Великий Турнир", () -> {
+        menuButtons.add(new MenuButtonInfo("Великий Турнир", ChatFormatting.GOLD, () -> {
             com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
-            // Отправляем запрос на начало драфта
             com.bmfalkye.network.NetworkHandler.INSTANCE.sendToServer(
                 new com.bmfalkye.network.NetworkHandler.StartDraftPacket(false));
         }));
-        menuButtons.add(new MenuButtonInfo("§dПользовательские Турниры", () -> {
+        menuButtons.add(new MenuButtonInfo("Пользовательские Турниры", ChatFormatting.LIGHT_PURPLE, () -> {
             com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
-            net.minecraft.client.Minecraft.getInstance().setScreen(new CustomTournamentScreen(mainMenu));
+            if (minecraft != null) {
+                minecraft.setScreen(new CustomTournamentScreen(mainMenu));
+            }
         }));
-        menuButtons.add(new MenuButtonInfo("§6Зал Славы", () -> {
+        menuButtons.add(new MenuButtonInfo("Зал Славы", ChatFormatting.GOLD, () -> {
             com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
-            net.minecraft.client.Minecraft.getInstance().setScreen(new HallOfFameScreen(mainMenu));
+            if (minecraft != null) {
+                minecraft.setScreen(new HallOfFameScreen(mainMenu));
+            }
         }));
-        menuButtons.add(new MenuButtonInfo("§eНастройки", () -> {
+        menuButtons.add(new MenuButtonInfo("Настройки", ChatFormatting.YELLOW, () -> {
             com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
-            net.minecraft.client.Minecraft.getInstance().setScreen(new com.bmfalkye.client.settings.GameSettingsScreen(mainMenu));
+            if (minecraft != null) {
+                minecraft.setScreen(new com.bmfalkye.client.settings.GameSettingsScreen(mainMenu));
+            }
         }));
-        menuButtons.add(new MenuButtonInfo("§bДрузья", () -> {
+        menuButtons.add(new MenuButtonInfo("Друзья", ChatFormatting.AQUA, () -> {
             com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
-            net.minecraft.client.Minecraft.getInstance().setScreen(new FriendsScreen(mainMenu));
+            if (minecraft != null) {
+                minecraft.setScreen(new FriendsScreen(mainMenu));
+            }
         }));
-        menuButtons.add(new MenuButtonInfo("§bГильдия", () -> {
+        menuButtons.add(new MenuButtonInfo("Гильдия", ChatFormatting.AQUA, () -> {
             com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
-            net.minecraft.client.Minecraft.getInstance().setScreen(new GuildScreen(mainMenu));
+            if (minecraft != null) {
+                minecraft.setScreen(new GuildScreen(mainMenu));
+            }
         }));
-        menuButtons.add(new MenuButtonInfo("§6Боссы", () -> {
+        menuButtons.add(new MenuButtonInfo("Боссы", ChatFormatting.GOLD, () -> {
             com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
-            net.minecraft.client.Minecraft.getInstance().setScreen(new BossScreen(mainMenu));
+            if (minecraft != null) {
+                minecraft.setScreen(new BossScreen(mainMenu));
+            }
         }));
-        menuButtons.add(new MenuButtonInfo("§aМагазин карт", () -> {
+        menuButtons.add(new MenuButtonInfo("Магазин карт", ChatFormatting.GREEN, () -> {
             com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
-            net.minecraft.client.Minecraft.getInstance().setScreen(new CardShopScreen(mainMenu));
+            if (minecraft != null) {
+                minecraft.setScreen(new CardShopScreen(mainMenu));
+            }
         }));
-        menuButtons.add(new MenuButtonInfo("§bСтатистика", () -> {
+        menuButtons.add(new MenuButtonInfo("Статистика", ChatFormatting.AQUA, () -> {
             com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
-            net.minecraft.client.Minecraft.getInstance().setScreen(new StatisticsScreen(mainMenu));
+            if (minecraft != null) {
+                minecraft.setScreen(new StatisticsScreen(mainMenu));
+            }
         }));
-        menuButtons.add(new MenuButtonInfo("§6Турниры", () -> {
+        menuButtons.add(new MenuButtonInfo("Турниры", ChatFormatting.GOLD, () -> {
             com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
-            net.minecraft.client.Minecraft.getInstance().setScreen(new TournamentScreen(mainMenu));
+            if (minecraft != null) {
+                minecraft.setScreen(new TournamentScreen(mainMenu));
+            }
         }));
-        menuButtons.add(new MenuButtonInfo("§aСезон", () -> {
+        menuButtons.add(new MenuButtonInfo("Сезон", ChatFormatting.GREEN, () -> {
             com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
-            net.minecraft.client.Minecraft.getInstance().setScreen(new SeasonScreen(mainMenu));
+            if (minecraft != null) {
+                minecraft.setScreen(new SeasonScreen(mainMenu));
+            }
         }));
-        menuButtons.add(new MenuButtonInfo("§7Реплеи", () -> {
+        menuButtons.add(new MenuButtonInfo("Реплеи", ChatFormatting.GRAY, () -> {
             com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
-            net.minecraft.client.Minecraft.getInstance().setScreen(new ReplayScreen(mainMenu));
+            if (minecraft != null) {
+                minecraft.setScreen(new ReplayScreen(mainMenu));
+            }
         }));
-        menuButtons.add(new MenuButtonInfo("§dЕжедневные награды", () -> {
+        menuButtons.add(new MenuButtonInfo("Ежедневные награды", ChatFormatting.LIGHT_PURPLE, () -> {
             com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
-            net.minecraft.client.Minecraft.getInstance().setScreen(new DailyRewardsScreen(mainMenu));
+            if (minecraft != null) {
+                minecraft.setScreen(new DailyRewardsScreen(mainMenu));
+            }
         }));
-        menuButtons.add(new MenuButtonInfo("§5События", () -> {
+        menuButtons.add(new MenuButtonInfo("События", ChatFormatting.DARK_PURPLE, () -> {
             com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
-            net.minecraft.client.Minecraft.getInstance().setScreen(new EventsScreen(mainMenu));
+            if (minecraft != null) {
+                minecraft.setScreen(new EventsScreen(mainMenu));
+            }
         }));
-        menuButtons.add(new MenuButtonInfo("§eПравила/Руководство", () -> {
+        menuButtons.add(new MenuButtonInfo("Правила/Руководство", ChatFormatting.YELLOW, () -> {
             com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
-            // Используем Patchouli если доступен, иначе обычный экран
             boolean bookOpened = false;
             if (com.bmfalkye.integration.LibraryIntegration.isPatchouliLoaded()) {
                 bookOpened = com.bmfalkye.integration.PatchouliIntegration.openBook(
                     new net.minecraft.resources.ResourceLocation("bm_falkye", "tutorial"));
             }
-            // Если Patchouli не загружен или открытие книги не удалось, открываем обычный экран
-            if (!bookOpened) {
-                net.minecraft.client.Minecraft.getInstance().setScreen(new FalkyeTutorialScreen(mainMenu));
+            if (!bookOpened && minecraft != null) {
+                minecraft.setScreen(new FalkyeTutorialScreen(mainMenu));
             }
         }));
         
@@ -187,14 +207,19 @@ public class FalkyeMainMenuScreen extends Screen {
         
         // Создаём кнопки с учётом прокрутки
         int currentY = startY - scrollOffset;
+        int guiY = layout.getGuiY();
+        int contentStartY = guiY + HEADER_HEIGHT;
+        int contentEndY = guiY + GUI_HEIGHT - FOOTER_HEIGHT;
+        
         for (MenuButtonInfo buttonInfo : menuButtons) {
             // Проверяем, видна ли кнопка
-            if (currentY + BUTTON_HEIGHT >= guiY + HEADER_HEIGHT && 
-                currentY <= guiY + GUI_HEIGHT - FOOTER_HEIGHT) {
+            if (currentY + BUTTON_HEIGHT >= contentStartY && currentY <= contentEndY) {
+                MutableComponent buttonText = Component.literal(buttonInfo.text)
+                    .withStyle(Style.EMPTY.withColor(buttonInfo.color));
                 
-                Button button = new com.bmfalkye.client.gui.StyledCardCollectionButton(
+                Button button = GuiUtils.createStyledButton(
                     startX, currentY, buttonWidth, BUTTON_HEIGHT,
-                    Component.literal(buttonInfo.text),
+                    buttonText,
                     (btn) -> buttonInfo.action.run()
                 );
                 this.addRenderableWidget(button);
@@ -205,9 +230,10 @@ public class FalkyeMainMenuScreen extends Screen {
         }
         
         // Кнопка "Назад" (всегда внизу)
-        Button backButton = new com.bmfalkye.client.gui.StyledCardCollectionButton(
-            startX, guiY + GUI_HEIGHT - FOOTER_HEIGHT + 10, buttonWidth, BUTTON_HEIGHT,
-            Component.literal("§7Назад"),
+        int backButtonY = layout.getBottomY(BUTTON_HEIGHT, 5);
+        Button backButton = GuiUtils.createStyledButton(
+            startX, backButtonY, buttonWidth, BUTTON_HEIGHT,
+            Component.literal("Назад").withStyle(ChatFormatting.GRAY),
             (btn) -> {
                 com.bmfalkye.client.sounds.SoundEffectManager.playButtonClickSound();
                 this.onClose();
@@ -222,59 +248,69 @@ public class FalkyeMainMenuScreen extends Screen {
      */
     private static class MenuButtonInfo {
         final String text;
+        final ChatFormatting color;
         final Runnable action;
         
-        MenuButtonInfo(String text, Runnable action) {
+        MenuButtonInfo(String text, ChatFormatting color, Runnable action) {
             this.text = text;
+            this.color = color;
             this.action = action;
         }
     }
     
-    private static long animationTime = 0;
-    
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        animationTime = System.currentTimeMillis();
+        // Пересчитываем layout при изменении размера экрана
+        if (layout == null || layout.needsRecalculation()) {
+            layout = new AdaptiveLayout(this, BASE_GUI_WIDTH, BASE_GUI_HEIGHT, 
+                                         MAX_SCREEN_RATIO, MIN_GUI_WIDTH, MIN_GUI_HEIGHT);
+            GUI_WIDTH = layout.getGuiWidth();
+            GUI_HEIGHT = layout.getGuiHeight();
+            visibleAreaHeight = GUI_HEIGHT - HEADER_HEIGHT - FOOTER_HEIGHT;
+        }
+        
         this.renderBackground(guiGraphics);
         
-        // ПЕРЕПИСАНО: Улучшенный фон окна в скевоморфном стиле (деревянная панель)
-        long time = System.currentTimeMillis();
-        float pulse = (float) (0.5f + 0.2f * Math.sin(time / 2000.0f));
+        int guiX = layout.getGuiX();
+        int guiY = layout.getGuiY();
         
-        // Деревянная панель
+        // Красивый фон окна
         GuiUtils.drawWoodenPanel(guiGraphics, guiX, guiY, GUI_WIDTH, GUI_HEIGHT, true);
+        // Золотая металлическая рамка
+        GuiUtils.drawMetalFrame(guiGraphics, guiX, guiY, GUI_WIDTH, GUI_HEIGHT, 3, true);
         
-        // Анимированная металлическая рамка (золотая при высоком pulse)
-        boolean goldFrame = pulse > 0.6f;
-        GuiUtils.drawMetalFrame(guiGraphics, guiX, guiY, GUI_WIDTH, GUI_HEIGHT, 3, goldFrame);
+        // Заголовок с тенью
+        MutableComponent title = Component.literal("ФАЛЬКИ")
+            .withStyle(Style.EMPTY
+                .withColor(ChatFormatting.GOLD)
+                .withBold(true));
+        MutableComponent subtitle = Component.literal("Главное меню")
+            .withStyle(Style.EMPTY
+                .withColor(ChatFormatting.YELLOW));
         
-        // Внутреннее свечение
-        int glowAlpha = (int) (pulse * 40);
-        int glowColor = (0xFF8B7355 & 0x00FFFFFF) | (glowAlpha << 24);
-        guiGraphics.fill(guiX + 3, guiY + 3, guiX + GUI_WIDTH - 3, guiY + 5, glowColor);
-        guiGraphics.fill(guiX + 3, guiY + GUI_HEIGHT - 5, guiX + GUI_WIDTH - 3, guiY + GUI_HEIGHT - 3, glowColor);
-        
-        // Заголовок с эффектом (рисуем только один раз)
-        Component title = Component.literal("§6§lФАЛЬКИ - ГЛАВНОЕ МЕНЮ");
         int titleWidth = this.font.width(title);
-        int titleX = guiX + (GUI_WIDTH - titleWidth) / 2;
-        int titleY = guiY + 18;
-        // Тень заголовка (черная)
+        int titleX = layout.getCenteredX(titleWidth);
+        int titleY = layout.getY(4);
+        
+        // Тень заголовка
         guiGraphics.drawString(this.font, title, titleX + 2, titleY + 2, 0x000000, false);
         // Сам заголовок
         guiGraphics.drawString(this.font, title, titleX, titleY, 0xFFFFFF, false);
         
-        // Область обрезки для кнопок (чтобы они не вылезали за границы)
+        int subtitleWidth = this.font.width(subtitle);
+        int subtitleX = layout.getCenteredX(subtitleWidth);
+        int subtitleY = titleY + this.font.lineHeight + 4;
+        guiGraphics.drawString(this.font, subtitle, subtitleX, subtitleY, 0xFFFF00, false);
+        
+        // Область обрезки для кнопок
         int contentStartY = guiY + HEADER_HEIGHT;
         int contentEndY = guiY + GUI_HEIGHT - FOOTER_HEIGHT;
         guiGraphics.enableScissor(guiX + 10, contentStartY, guiX + GUI_WIDTH - 10, contentEndY);
         
-        // Рендерим виджеты (кнопки) вручную, чтобы избежать автоматической отрисовки заголовка
-        for (net.minecraft.client.gui.components.Renderable renderable : this.renderables) {
-            if (renderable instanceof Button button) {
-                com.bmfalkye.client.gui.GuiUtils.renderStyledButton(guiGraphics, this.font, button, mouseX, mouseY, false);
-            } else {
-                renderable.render(guiGraphics, mouseX, mouseY, partialTick);
+        // Рендерим кнопки
+        for (Button button : buttons) {
+            if (button != null && button.visible) {
+                GuiUtils.renderStyledButton(guiGraphics, this.font, button, mouseX, mouseY, false);
             }
         }
         
@@ -295,26 +331,35 @@ public class FalkyeMainMenuScreen extends Screen {
             
             // Ползунок
             int sliderHeight = Math.max(20, (int)((double)visibleAreaHeight / contentHeight * scrollBarHeight));
-            int sliderY = scrollBarY + (int)((double)scrollOffset / (contentHeight - visibleAreaHeight) * 
-                (scrollBarHeight - sliderHeight));
+            int maxScroll = Math.max(1, contentHeight - visibleAreaHeight);
+            int sliderY = scrollBarY + (int)((double)scrollOffset / maxScroll * (scrollBarHeight - sliderHeight));
             guiGraphics.fill(scrollBarX, sliderY, scrollBarX + scrollBarWidth, 
                 sliderY + sliderHeight, 0xFF8B7355);
             
             // Стрелки прокрутки
             if (scrollOffset > 0) {
-                guiGraphics.drawString(this.font, "▲", scrollBarX - 8, contentStartY, 0xFFFFFF, false);
+                guiGraphics.drawString(this.font, Component.literal("▲"), 
+                    scrollBarX - 8, contentStartY, 0xFFFFFF, false);
             }
-            if (scrollOffset < contentHeight - visibleAreaHeight) {
-                guiGraphics.drawString(this.font, "▼", scrollBarX - 8, contentEndY - 10, 0xFFFFFF, false);
+            if (scrollOffset < maxScroll) {
+                guiGraphics.drawString(this.font, Component.literal("▼"), 
+                    scrollBarX - 8, contentEndY - 10, 0xFFFFFF, false);
             }
         }
     }
     
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (layout == null) return super.mouseScrolled(mouseX, mouseY, delta);
+        
+        int guiX = layout.getGuiX();
+        int guiY = layout.getGuiY();
+        int contentStartY = guiY + HEADER_HEIGHT;
+        int contentEndY = guiY + GUI_HEIGHT - FOOTER_HEIGHT;
+        
         // Проверяем, находится ли мышь в области контента
         if (mouseX >= guiX && mouseX <= guiX + GUI_WIDTH &&
-            mouseY >= guiY + HEADER_HEIGHT && mouseY <= guiY + GUI_HEIGHT - FOOTER_HEIGHT) {
+            mouseY >= contentStartY && mouseY <= contentEndY) {
             
             int maxScroll = Math.max(0, contentHeight - visibleAreaHeight);
             int scrollStep = BUTTON_HEIGHT + BUTTON_SPACING;
@@ -336,27 +381,4 @@ public class FalkyeMainMenuScreen extends Screen {
     public boolean isPauseScreen() {
         return false;
     }
-    
-    /**
-     * Смешивает два цвета
-     */
-    private static int blendColor(int color1, int color2, float t) {
-        int r1 = (color1 >> 16) & 0xFF;
-        int g1 = (color1 >> 8) & 0xFF;
-        int b1 = color1 & 0xFF;
-        int a1 = (color1 >> 24) & 0xFF;
-        
-        int r2 = (color2 >> 16) & 0xFF;
-        int g2 = (color2 >> 8) & 0xFF;
-        int b2 = color2 & 0xFF;
-        int a2 = (color2 >> 24) & 0xFF;
-        
-        int r = (int) (r1 + (r2 - r1) * t);
-        int g = (int) (g1 + (g2 - g1) * t);
-        int b = (int) (b1 + (b2 - b1) * t);
-        int a = (int) (a1 + (a2 - a1) * t);
-        
-        return (a << 24) | (r << 16) | (g << 8) | b;
-    }
 }
-
